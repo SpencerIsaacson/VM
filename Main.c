@@ -9,9 +9,10 @@
 #define byte unsigned char
 #define bytes_per_kilobyte 1024
 #define bytes_per_megabyte 1024*1024
-#define u64 long long
+#define u64 unsigned long long
 #define bytes_per_u64 8
-static u64 memory[15*bytes_per_megabyte/bytes_per_u64];
+#define memory_length 15*bytes_per_megabyte/bytes_per_u64
+static u64 memory[memory_length];
 static u64 register_A = 0;
 static u64 register_B = 0;
 static u64 output = 0;
@@ -44,55 +45,54 @@ enum opcodes
 	jump_less_than_or_equal,
 	jump_greater_than,
 	jump_greater_than_or_equal,
+	opcode_count
 };
 
 
-#define frame_buffer 60
+char* names[opcode_count] =
+{
+	"nop",
+	"and",
+	"or",
+	"xor",
+	"left_shift",
+	"right_shift",
+	"increment",
+	"decrement",
+	"add",
+	"subtract",
+	"multiply",
+	"divide",
+	"loadAi",
+	"loadBi",
+	"loadAm",
+	"loadBm",
+	"store",
+	"jump",
+	"jeq",
+	"jump_not_equal",
+	"jump_less_than",
+	"jump_less_than_or_equal",
+	"jgt",
+	"jump_greater_than_or_equal",	
+};
 
+#define frame_buffer 600
+#define gamepad 60+640*480
 static bool window_is_open = true;
 static int width = 640, height = 480;
 void main()
 {
-	for (int i = 0; i < 1024; ++i)
+	for (int i = 0; i < memory_length; ++i)
 	{
 		memory[i] = 0;
 	}
 
-	memory[0] = loadA_immediate;
-	memory[1] = 7;
-	memory[2] = loadB_immediate;
-	memory[3] = 5;
-	memory[4] = add;
-	memory[5] = store;
-	memory[6] = 10;
-	memory[7] = loadA_immediate;
-	memory[8] = 12;
-	memory[9] = loadB_immediate;
-	memory[10] = 0; //where we save the result;
-	memory[11] = jump_equal;
-	memory[12] = 20;
-	memory[13] = jump;
-	memory[14] = 13;
-	memory[20] = loadA_immediate;
-	memory[21] = 0x0000FFFF00FF00FF;
-	memory[22] = loadB_immediate;
-	memory[23] = 0;
-	memory[24] = or;
-	memory[25] = store;
-	memory[26] = frame_buffer;
-	memory[27] = loadA_immediate;
-	memory[28] = 1;
-	memory[29] = loadB_memory;
-	memory[30] = 26;
-	memory[31] = add;
-	memory[32] = store;
-	memory[33] = 26;
-	memory[34] = loadA_immediate;
-	memory[35] = frame_buffer+(16*4);
-	memory[36] = jump_greater_than;
-	memory[37] = 20;
-	memory[38] = jump;
-	memory[39] = 38;
+	FILE* file = fopen("assembly.bin", "rb");
+	fseek(file,0,SEEK_END);
+	int bytes_long = ftell(file);
+	fseek(file,0, SEEK_SET);
+	fread(memory,bytes_long,1,file);
 
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_Window *window = SDL_CreateWindow("VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, 0);
@@ -107,6 +107,8 @@ void main()
 
 			switch(instruction)
 			{
+				case nop:
+					break;
 				case and:
 					output = register_A & register_B;
 					break;
@@ -161,45 +163,48 @@ void main()
 					program_counter++;
 					break;																
 				case jump:
-					program_counter = memory[program_counter + 1];
-					goto skip_pc_increment;
+					if(memory[program_counter + 1] < memory_length)
+					{
+						program_counter = memory[program_counter + 1];
+						goto skip_pc_increment;
+					}
 				case jump_equal:
-					if(register_A == register_B)
+					if(register_A == register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
 					}
 					break;
 				case jump_not_equal:
-					if(register_A != register_B)
+					if(register_A != register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
 					}
 					break;
 				case jump_less_than:
-					if(register_A < register_B)
+					if(register_A < register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
 					}
 					break;
 				case jump_less_than_or_equal:
-					if(register_A <= register_B)
+					if(register_A <= register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
 					}
 					break;					
 				case jump_greater_than:
-					if(register_A > register_B)
+					if(register_A > register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
 					}
 					break;
 				case jump_greater_than_or_equal:
-					if(register_A >= register_B)
+					if(register_A >= register_B && memory[program_counter + 1] < memory_length)
 					{
 						program_counter = memory[program_counter + 1];
 						goto skip_pc_increment;
@@ -213,7 +218,7 @@ void main()
 			
 			skip_pc_increment:
 			
-			if(program_counter  == 1024)
+			if(program_counter  == memory_length)
 				program_counter = 0;
 		}
 
@@ -229,12 +234,12 @@ void main()
         }
 	
 
-			static float previous_time=0;
-			static float elapsed= 0;
-			elapsed += (float)(clock() - previous_time) / (float)CLOCKS_PER_SEC;
-			
+		static float previous_time=0;
+		static float elapsed= 0;
+		elapsed += (float)(clock() - previous_time) / (float)CLOCKS_PER_SEC;
+		
 
-			previous_time = clock();            
+		previous_time = clock();            
 
 		if(elapsed>.015f)
 		{
@@ -242,5 +247,22 @@ void main()
      		elapsed = 0;
         	SDL_UpdateWindowSurface(window);
 		}
+
+
+		// //print memory state
+		// {
+		// 	byte* as_bytes = (byte*)memory;
+
+		// 	for (int i = 0; i < 100; ++i)
+		// 	{
+		// 		printf("%02x ",as_bytes[i]);
+		// 	}
+
+		// 	printf("\n\n");
+		// }
+
+		// sleep(75);
+
+		printf("\nA: %d, B: %d, out: %d, pc: %d, opcode: %s\n",register_A, register_B, output, program_counter, names[memory[program_counter]]);
     }
  }	

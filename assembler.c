@@ -1,7 +1,9 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "Debug.h"
+#include <windows.h>
 
 enum mneumonic_ids
 {
@@ -19,7 +21,7 @@ enum mneumonic_ids
 	divide,
 	load_immediate,
 	load_memory,
-	store,
+	store = 16,
 	jump,
 	jump_equal,
 	jump_not_equal,
@@ -29,7 +31,7 @@ enum mneumonic_ids
 	jump_greater_than_or_equal,
 };
 
-#define mneumonic_count 22
+#define mneumonic_count 24
 char* mneumonic_names[mneumonic_count] =
 {
 	"nop",
@@ -46,6 +48,8 @@ char* mneumonic_names[mneumonic_count] =
 	"divide",
 	"loadi",
 	"loadm",
+	"dummy instruction", //just maintaining the alignment of the lookup
+	"dummy instruction", //just maintaining the alignment of the lookup
 	"store",
 	"jump",
 	"jeq",
@@ -71,7 +75,7 @@ int main(int argc, char** argv)
 			int characters_long = ftell(file);
 			fseek(file,0,0);
 
-			char text[characters_long+1];
+			char* text = malloc(characters_long+1);
 			text[characters_long] = 0;
 			fread(text, characters_long,1,file);
 			fclose(file);
@@ -79,7 +83,7 @@ int main(int argc, char** argv)
 			int line_number = 0;
 			int scanner = 0;
 
-			long long output_data[1000]; //todo make sized correctly
+			unsigned long long output_data[100000]; //todo make sized correctly
 			int current_data_word = 0;
 			while(scanner < characters_long)
 			{
@@ -119,15 +123,15 @@ int main(int argc, char** argv)
 				scanner+=2; //skip over newline
 				token_count++; //make it 1 indexed
 
-				//print tokenized info
-				{
-					printf("%d. mneumonic: %s", line_number, mneumonic);
-					if(token_count > 1)
-						printf(" arg1: %s", arg1);
-					if(token_count > 2)
-						printf(" arg2: %s", arg2);
-					printf("\n");
-				}
+				// //print tokenized info
+				// {
+				// 	printf("%d. mneumonic: %s", line_number, mneumonic);
+				// 	if(token_count > 1)
+				// 		printf(" arg1: %s", arg1);
+				// 	if(token_count > 2)
+				// 		printf(" arg2: %s", arg2);
+				// 	printf("\n");
+				// }
 
 				int mneumonic_id;
 				//look up id
@@ -153,7 +157,6 @@ int main(int argc, char** argv)
 
 				switch(mneumonic_id)
 				{
-					case load_memory:
 					case load_immediate:
 					{
 						if(arg1[0] == 'A')
@@ -162,9 +165,46 @@ int main(int argc, char** argv)
 							output_data[current_data_word] = 13;
 
 						char* end;
-						output_data[current_data_word+1] = _strtoui64(arg2,&end,10);//todo parse hex values too;						
+						output_data[current_data_word+1] = strtoull(arg2,&end,10);//todo parse hex values too;
+
+						// printf("here is the value: %s\n", arg2);
+						// printf("%llu\n", output_data[current_data_word+1]);
+
+
+						// printf("load instruction:\n");
+						// unsigned char* as_bytes = (unsigned char*)(output_data);
+						// for (int i = current_data_word*8; i < current_data_word*8+16; ++i)
+						// {
+						// 	printf("%02x ", (unsigned int)as_bytes[i]);
+						// }		
+						// printf("\n");										
 						current_data_word += 2;
+						// Sleep(50);
 					} break;
+					case load_memory:
+					{
+						if(arg1[0] == 'A')
+							output_data[current_data_word] = 14;
+						else if(arg1[0] == 'B')
+							output_data[current_data_word] = 15;
+
+						char* end;
+						output_data[current_data_word+1] = strtoull(arg2,&end,10);//todo parse hex values too;
+
+						// printf("here is the value: %s\n", arg2);
+						// printf("%llu\n", output_data[current_data_word+1]);
+
+
+						// printf("load instruction:\n");
+						// unsigned char* as_bytes = (unsigned char*)(output_data);
+						// for (int i = current_data_word*8; i < current_data_word*8+16; ++i)
+						// {
+						// 	printf("%02x ", (unsigned int)as_bytes[i]);
+						// }		
+						// printf("\n");										
+						current_data_word += 2;
+						// Sleep(50);
+					} break;					
 					case store:
 					case jump_equal:
 					case jump:
@@ -175,7 +215,8 @@ int main(int argc, char** argv)
 					case jump_less_than:
 					{
 						output_data[current_data_word] = mneumonic_id;
-						output_data[current_data_word+1] = _strtoui64(arg1,&end,10);//todo parse hex values too;
+						char* end;
+						output_data[current_data_word+1] = strtoull(arg1,&end,10);//todo parse hex values too;
 						current_data_word+=2;						
 					} break;
 					case nop:
@@ -201,10 +242,20 @@ int main(int argc, char** argv)
 				line_number++;
 			}
 
-			char* as_bytes = (char*)(output_data);
-			for (int i = 0; i < current_data_word*8; ++i)
+			free(text);
+			unsigned char* as_bytes = (unsigned char*)(output_data);
+			// for (int i = 0; i < current_data_word*8; ++i)
+			// {
+			// 	printf("%02x ", as_bytes[i]);
+			// 	Sleep(50);
+			// }
+
+			file = fopen("assembly.bin","wb");
+			if(file != NULL)
 			{
-				printf("%02x ", as_bytes[i]);
+				for (int i = 0; i < current_data_word*8; ++i)
+					fputc(as_bytes[i], file);
+				fclose(file);
 			}			
 		}
 	}

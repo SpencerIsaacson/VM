@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +28,11 @@ enum mneumonic_ids
 	jump_less_than_or_equal,
 	jump_greater_than,
 	jump_greater_than_or_equal,
+	clear,
+	screen_interrupt,
 };
 
-#define mneumonic_count 24
+#define mneumonic_count 26
 char* mneumonic_names[mneumonic_count] =
 {
 	"nop",
@@ -57,7 +58,9 @@ char* mneumonic_names[mneumonic_count] =
 	"jump_less_than",
 	"jump_less_than_or_equal",
 	"jgt",
-	"jump_greater_than_or_equal",	
+	"jump_greater_than_or_equal",
+	"clear",
+	"screen_interrupt",
 };
 
 int look_up_id(char* string);
@@ -73,7 +76,7 @@ int main(int argc, char** argv)
 		{
 			fseek(file,0,SEEK_END);
 			int characters_long = ftell(file);
-			fseek(file,0,0);
+			rewind(file);
 
 			char* text = malloc(characters_long+1);
 			text[characters_long] = 0;
@@ -132,7 +135,6 @@ int main(int argc, char** argv)
 				// 		printf(" arg2: %s", arg2);
 				// 	printf("\n");
 				// }
-
 				int mneumonic_id;
 				//look up id
 				{
@@ -151,7 +153,7 @@ int main(int argc, char** argv)
 				if(mneumonic_id == -1)
 				{
 					printf("invalid id");
-					return;
+					return -1;
 				}
 
 
@@ -204,7 +206,7 @@ int main(int argc, char** argv)
 						// printf("\n");										
 						current_data_word += 2;
 						// Sleep(50);
-					} break;					
+					} break;	
 					case store:
 					case jump_equal:
 					case jump:
@@ -219,6 +221,7 @@ int main(int argc, char** argv)
 						output_data[current_data_word+1] = strtoull(arg1,&end,10);//todo parse hex values too;
 						current_data_word+=2;						
 					} break;
+					case screen_interrupt:				
 					case nop:
 					case add:
 					case or:
@@ -261,5 +264,6 @@ int main(int argc, char** argv)
 	}
 
 	EndTiming();
+	return 0;
 }
 

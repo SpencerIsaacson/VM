@@ -1,0 +1,24 @@
+int x = 10
+int y = 15
+int width = 150
+int height = 75
+int _x = 0
+int _y = 0
+int pixel_address = 0
+int white = 0xFF_FF_FF
+
+while(_y < height)
+{
+	while(_x < width)
+	{
+		pixel_address = y+_y
+		pixel_address *= SCREEN_WIDTH
+		pixel_address /= 2
+		pixel_address += x
+		pixel_address += _x
+		pixel_address += SCREEN
+		memory[pixel_address] = white
+		_x++
+	}
+	_y++
+}

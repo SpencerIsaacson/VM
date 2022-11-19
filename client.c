@@ -6,7 +6,7 @@
 #define SDL_MAIN_HANDLED
 #include "Dependencies/SDL_Headers/SDL.h"
 #include "Debug.h"
-#define DEBUG 1
+#define DEBUG 0
 typedef struct 
 {
 	float x, y;

@@ -16,8 +16,7 @@ static int width = 480, height = 270;
 
 typedef enum Instruction
 {
-	HALT, //TODO
-	NOP = 0,
+	NOP,
 	AND,
 	OR,
 	XOR,
@@ -46,6 +45,7 @@ typedef enum Instruction
 	SET,
 	LOAD,
 	opcode_count,
+	HALT, //TODO
 } Instruction;
 
 char* names[opcode_count] =

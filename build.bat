@@ -1,2 +1,2 @@
-@"compiler/tcc" -o build/stronkbox_0.0.0.exe client.c -luser32 Dependencies/SDL2.dll
+@"compiler/tcc" client.c -o stronk.exe -luser32 Dependencies/SDL2.dll -DDEBUG && stronk
 @rem cl  -Zi client.c /I"Dependencies\SDL_Headers" /link /LIBPATH:"D:\Downloads\SDL2-devel-2.0.12-VC\SDL2-2.0.12\lib\x64" user32.lib SDL2.lib

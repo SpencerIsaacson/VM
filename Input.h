@@ -1,3 +1,8 @@
+typedef struct 
+{
+	float x, y;
+} v2;
+
 typedef struct MouseState
 {
 	v2 position;
@@ -6,15 +11,56 @@ typedef struct MouseState
 	bool leftbutton_was_down;
 } MouseState;
 
-MouseState mousestate;
-typedef struct PadState
+typedef struct ShortStick //16 bit (short) representation of analog stick state
 {
-	bool buttons[10];
-	v2 left_stick;
-	v2 right_stick;
-} PadState;
+	signed char X;
+	signed char Y;
+} ShortStick;
 
-PadState game_pads[4];
+typedef enum
+{
+	UP =     1 << 0,
+	DOWN =   1 << 1,
+	LEFT =   1 << 2,
+	RIGHT =  1 << 3,
+	A =      1 << 4,
+	B =      1 << 5,
+	X =      1 << 6,
+	Y =      1 << 7,
+	SELECT = 1 << 8,
+	START =  1 << 9,
+	L1 =     1 << 10,
+	R1 =     1 << 11,
+	L2 =     1 << 12,
+	R2 =     1 << 13,
+	L3 =     1 << 14,
+	R3 =     1 << 15,
+
+} ButtonName;
+
+typedef unsigned short Buttons;
+
+typedef struct Triggers //sizeof short
+{
+	unsigned char l_trigger;
+	unsigned char r_trigger;
+} Triggers;
+
+typedef struct Sticks
+{
+	ShortStick left_stick;
+	ShortStick right_stick;
+} Sticks;
+
+typedef struct GamePad //total size of 8 bytes (64 bits)
+{
+	Buttons buttons;
+	Triggers triggers;
+	/*boundary between first 32-bit word and second word ----------*/
+	Sticks sticks;
+} GamePad;
+
+MouseState mousestate;
 
 enum Keys
 {
@@ -33,53 +79,24 @@ enum Keys
 	Keys_LCtrl = 162,
 };
 
-enum Buttons
-{
-	LEFT,
-	RIGHT,
-	DOWN,
-	JUMP,
-	PUNCH
-};
-
 bool keys_down[256];
 bool keys_stale[256]; //whether a key has been pressed for more than one consecutive frame
 bool keyboard_state[256];
 
-enum Keys control_mappings[4][5] = //each row represents a player's control scheme
-{
-	{Keys_A,       Keys_D ,       Keys_S,		 Keys_W,	   Keys_Q },
-	{Keys_J,       Keys_L,        Keys_K,        Keys_I,       Keys_U },
-	{Keys_Left,    Keys_Right,    Keys_Down,     Keys_Up,      Keys_Delete },
-	{Keys_NumPad4, Keys_NumPad6,  Keys_NumPad5,  Keys_NumPad8, Keys_NumPad7 }
-};
 
 bool KeyDownFresh(enum Keys key)
-{
-	return keys_down[key] && !keys_stale[key];
-}
+{	return keys_down[key] && !keys_stale[key];	}
 
 bool KeyDown(enum Keys key)
-{
-	return keys_down[key];
-}
+{	return keys_down[key];	}
 
-bool ButtonDown(int player, enum Buttons action)
-{
-	return KeyDown(control_mappings[player][action]);
-}
-
-bool ButtonDownFresh(int player, enum Buttons action)
-{
-	return KeyDownFresh(control_mappings[player][action]);
-}
 
 void PollKeyboard()
 {
 	for (int i = 0; i < 256; i++)
 		keys_stale[i] = keys_down[i];
 
-	GetKeyboardState(keyboard_state);
+	GetKeyboardState((PBYTE)keyboard_state);
 
 	for (int i = 0; i < 256; i++)
 		keys_down[i] = keyboard_state[i] & 128;

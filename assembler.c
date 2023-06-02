@@ -12,7 +12,7 @@ enum mneumonic_ids
 	xor,
 	left_shift,
 	right_shift,
-	increment,
+	INC,
 	decrement,
 	add,
 	subtract,
@@ -41,7 +41,7 @@ char* mneumonic_names[mneumonic_count] =
 	"xor",
 	"left_shift",
 	"right_shift",
-	"increment",
+	"INC",
 	"decrement",
 	"add",
 	"subtract",
@@ -86,7 +86,7 @@ int main(int argc, char** argv)
 			int line_number = 0;
 			int scanner = 0;
 
-			unsigned long long output_data[100000]; //todo make sized correctly
+			unsigned int output_data[100000]; //todo make sized correctly
 			int current_data_word = 0;
 			while(scanner < characters_long)
 			{
@@ -105,6 +105,16 @@ int main(int argc, char** argv)
 
 				while(text[scanner] != '\r' && scanner != characters_long)
 				{
+					if(text[scanner] == '#')
+					{
+						while(text[scanner] != '\r' && scanner != characters_long)
+						{
+							scanner++;
+							token_scanner++;
+						}
+						scanner+=2;
+						goto  gloop;
+					}
 					if(text[scanner] == ' ')
 						was_space = 1;
 					else
@@ -152,7 +162,7 @@ int main(int argc, char** argv)
 
 				if(mneumonic_id == -1)
 				{
-					printf("invalid id");
+					printf("invalid instruction at line: %d\n", line_number);
 					return -1;
 				}
 
@@ -167,7 +177,7 @@ int main(int argc, char** argv)
 							output_data[current_data_word] = 13;
 
 						char* end;
-						output_data[current_data_word+1] = strtoull(arg2,&end,10);//todo parse hex values too;
+						output_data[current_data_word+1] = strtoul(arg2,&end,10);//todo parse hex values too;
 
 						// printf("here is the value: %s\n", arg2);
 						// printf("%llu\n", output_data[current_data_word+1]);
@@ -191,7 +201,7 @@ int main(int argc, char** argv)
 							output_data[current_data_word] = 15;
 
 						char* end;
-						output_data[current_data_word+1] = strtoull(arg2,&end,10);//todo parse hex values too;
+						output_data[current_data_word+1] = strtoul(arg2,&end,10);//todo parse hex values too;
 
 						// printf("here is the value: %s\n", arg2);
 						// printf("%llu\n", output_data[current_data_word+1]);
@@ -218,7 +228,7 @@ int main(int argc, char** argv)
 					{
 						output_data[current_data_word] = mneumonic_id;
 						char* end;
-						output_data[current_data_word+1] = strtoull(arg1,&end,10);//todo parse hex values too;
+						output_data[current_data_word+1] = strtoul(arg1,&end,10);//todo parse hex values too;
 						current_data_word+=2;						
 					} break;
 					case screen_interrupt:				
@@ -229,7 +239,7 @@ int main(int argc, char** argv)
 					case xor:
 					case left_shift:
 					case right_shift:
-					case increment:
+					case INC:
 					case decrement:
 					case subtract:
 					case multiply:
@@ -242,6 +252,7 @@ int main(int argc, char** argv)
 					} break;
 				}
 
+				gloop:
 				line_number++;
 			}
 
@@ -256,7 +267,7 @@ int main(int argc, char** argv)
 			file = fopen("assembly.bin","wb");
 			if(file != NULL)
 			{
-				for (int i = 0; i < current_data_word*8; ++i)
+				for (int i = 0; i < current_data_word*4; ++i)
 					fputc(as_bytes[i], file);
 				fclose(file);
 			}			

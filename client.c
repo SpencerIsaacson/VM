@@ -13,22 +13,10 @@ static bool window_is_open = true;
 int scale_factor = 1;
 #define mem stronkbox.memory
 
-#include "platformer.h"
-
 void main(int argc, char **argv)
 {
 	reset();
 
-// #define a(n) get_alias(n)
-// #include "function_test.c";
-// #undef a
-
-	FILE *file = fopen("assembly.bin", "rb");
-	fseek(file, 0, SEEK_END);
-	int c = ftell(file);
-	rewind(file);
-	fread(&stronkbox.memory.RAM[start_address],c,1,file);
-	fclose(file);
 	if(argc > 1)
 	{
 		if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
@@ -43,6 +31,13 @@ void main(int argc, char **argv)
 		}
 	}
 
+	FILE *file = fopen("assembly.bin", "rb");
+	fseek(file, 0, SEEK_END);
+	int c = ftell(file);
+	rewind(file);
+	fread(&stronkbox.memory.RAM[start_address],c,1,file);
+	fclose(file);
+	
 	//init();
 	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
 

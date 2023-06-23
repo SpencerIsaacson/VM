@@ -472,7 +472,7 @@ _tick()
 			init();
 	}
 
-	if(true)
+	if(false)
 	//sphere
 	{
 		float sphere_size = 120.1f;

@@ -6,6 +6,4 @@
 #define magenta 0xFFFF00FF
 #define yellow  0xFFFFFF00
 #define white   0xFFFFFFFF
-
-
 #define brown   0xFFBB5500

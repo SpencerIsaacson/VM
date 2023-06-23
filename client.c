@@ -9,15 +9,26 @@
 #include "input.h"
 #include "draw.h"
 #include "vm.c"
-
 static bool window_is_open = true;
 int scale_factor = 1;
-Memory mem;
+#define mem stronkbox.memory
 
 #include "platformer.h"
 
 void main(int argc, char **argv)
 {
+	reset();
+
+// #define a(n) get_alias(n)
+// #include "function_test.c";
+// #undef a
+
+	FILE *file = fopen("assembly.bin", "rb");
+	fseek(file, 0, SEEK_END);
+	int c = ftell(file);
+	rewind(file);
+	fread(&stronkbox.memory.RAM[start_address],c,1,file);
+	fclose(file);
 	if(argc > 1)
 	{
 		if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
@@ -28,11 +39,11 @@ void main(int argc, char **argv)
 		else
 		{
 			printf("unrecognized commandline argument \"%s\"\n", argv[1]);
-			//exit(1);
-		}	
+			exit(1);
+		}
 	}
 
-	init();
+	//init();
 	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
 
     //Load Joysticks
@@ -51,12 +62,13 @@ void main(int argc, char **argv)
 
 	SDL_Window *window = SDL_CreateWindow("StronkBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vm_width*scale_factor, vm_height*scale_factor, 0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
-	unsigned int* pixels = surface->pixels;
+	Color* pixels = (Color*)surface->pixels;
 
-	static clock_t previous_time = 0;
-	static float elapsed = 0;
-	static int ticks = 0;
-
+	s64 prev = 0;
+	s64 cur = 0;
+	u32 micros = 0;
+	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+	QueryPerformanceCounter((LARGE_INTEGER*)&prev);
     while (window_is_open)
     {
     	if(GetAsyncKeyState(VK_ESCAPE))
@@ -115,14 +127,37 @@ void main(int argc, char **argv)
 
 		}
 
-		_tick();
-		elapsed	= 0;
-		int* screen = (int*)(&(mem.frame_buffer));
-		memcpy(pixels, screen, vm_width*vm_height*4);
-    	SDL_UpdateWindowSurface(window);
+#define clock_rate 100000000
+#define tick_count 100
+#define interval 1000000/clock_rate*tick_count
+		u32 microseconds;
+		static u32 micros2;
+		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+    	diff = ((cur - prev) * 1000000) / freq;
+    	microseconds = (u32)(diff & 0xffffffff);
+    	micros2 += microseconds;
 
-    	Sleep(1);
-		elapsed += (float)(clock() - previous_time) / (float)CLOCKS_PER_SEC;
-		previous_time = clock();		
+    	if(micros2 > interval)
+    	{
+
+	    	for (int i = 0; i < tick_count; ++i)
+	    	{
+	    		tick();
+	    	}
+	    	micros2=0;
+    	}
+
+		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+    	diff = ((cur - prev) * 1000000) / freq;
+    	microseconds = (u32)(diff & 0xffffffff);
+    	micros += microseconds;
+    	if(micros >= 16667)
+    	{
+			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
+	    	SDL_UpdateWindowSurface(window);
+	    	micros = 0;
+    	}
+
+		QueryPerformanceCounter((LARGE_INTEGER*)&prev);
     }
  }	

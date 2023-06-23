@@ -1,0 +1,11 @@
+TODO
+fix timing CHECK
+add status and config registers (mapped to RAM?)
+get assembler working again
+get functions/stack working in assembly
+build pseudo-compiler
+incorporate sound
+incorporate gamepad
+remove SDL/switch to win32
+port 2D platformer to bytecode
+build 3D Zelda dungeon

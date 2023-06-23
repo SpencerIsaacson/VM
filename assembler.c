@@ -1,280 +1,383 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include "Debug.h"
+#include <stdbool.h>
 #include <windows.h>
+#include "input.h"
+#include "vm.c"
 
-enum mneumonic_ids
+typedef enum
 {
-	nop,
-	and,
-	or,
-	xor,
-	left_shift,
-	right_shift,
-	INC,
-	decrement,
-	add,
-	subtract,
-	multiply,
-	divide,
-	load_immediate,
-	load_memory,
-	store = 16,
-	jump,
-	jump_equal,
-	jump_not_equal,
-	jump_less_than,
-	jump_less_than_or_equal,
-	jump_greater_than,
-	jump_greater_than_or_equal,
-	clear,
-	screen_interrupt,
+	keyw_set,
+	keyw_inc,
+	keyw_add,
+	keyw_mult,
+	keyw_jmp,
+	keyw_jlt,
+	keyw_halt,
+	keyword_count,
+} Keyword;
+
+char * keywords[keyword_count] =
+{
+	[keyw_set] = "set",
+	[keyw_inc] = "inc",
+	[keyw_halt] = "halt",
+	[keyw_jmp] = "jmp",
+	[keyw_add] = "add",
+	[keyw_mult] = "mult",
+	[keyw_jlt] = "jlt",
 };
 
-#define mneumonic_count 26
-char* mneumonic_names[mneumonic_count] =
+char str_eq(char *a, char *b)
 {
-	"nop",
-	"and",
-	"or",
-	"xor",
-	"left_shift",
-	"right_shift",
-	"INC",
-	"decrement",
-	"add",
-	"subtract",
-	"multiply",
-	"divide",
-	"loadi",
-	"loadm",
-	"dummy instruction", //just maintaining the alignment of the lookup
-	"dummy instruction", //just maintaining the alignment of the lookup
-	"store",
-	"jump",
-	"jeq",
-	"jump_not_equal",
-	"jump_less_than",
-	"jump_less_than_or_equal",
-	"jgt",
-	"jump_greater_than_or_equal",
-	"clear",
-	"screen_interrupt",
-};
+	while(*a != 0 && b != 0)
+	{
+		if(*(a++) != *(b++))
+			return 0;
+	}
 
-int look_up_id(char* string);
-char is_whitespace(char a);
+	return 1;
+}
+
+
+int parse_int(char *s)
+{
+	int ret = 0;
+	while(*s != 0)
+	{
+		ret += (*(s++)-'0');
+		if(*s != 0)
+			ret *= 10;
+	}
+
+	return ret;
+}
 
 int main(int argc, char** argv)
 {
-	StartTiming();
 	if(argc == 2)
 	{
-		FILE* file = fopen(argv[1],"rb");
-		if(file != NULL)
+		char* text;
+		int characters_long;
+		
+		//read file
 		{
-			fseek(file,0,SEEK_END);
-			int characters_long = ftell(file);
-			rewind(file);
-
-			char* text = malloc(characters_long+1);
-			text[characters_long] = 0;
-			fread(text, characters_long,1,file);
-			fclose(file);
-
-			int line_number = 0;
-			int scanner = 0;
-
-			unsigned int output_data[100000]; //todo make sized correctly
-			int current_data_word = 0;
-			while(scanner < characters_long)
+			FILE* file = fopen(argv[1],"rb");
+			if(file == NULL){
+				printf("File \"%s\" does not exist\n", argv[1]);
+				exit(-1);
+			}
+			else
 			{
-				char mneumonic[50], arg1[50], arg2[50];
-				for (int o = 0; o < 50; ++o)
+				fseek(file,0,SEEK_END);
+				characters_long = ftell(file);
+				rewind(file);
+				text = (char*)malloc(characters_long+1);
+				text[characters_long] = 0;
+				fread(text, characters_long,1,file);
+				fclose(file);
+			}
+		}
+
+		while(*text != 0)
+		{		
+			char line[300] = {0};
+			//read line
+			{
+				int i = 0;
+				while(*text != '\n')
 				{
-					mneumonic[o] = 0;
-					arg1[o] = 0;
-					arg2[o] = 0;
+					line[i++] = *(text++);
 				}
-
-				char* pointers[3] = { mneumonic, arg1, arg2 };
-				char was_space = 0;
-				int token_count = 0;
-				int token_scanner = 0;
-
-				while(text[scanner] != '\r' && scanner != characters_long)
-				{
-					if(text[scanner] == '#')
-					{
-						while(text[scanner] != '\r' && scanner != characters_long)
-						{
-							scanner++;
-							token_scanner++;
-						}
-						scanner+=2;
-						goto  gloop;
-					}
-					if(text[scanner] == ' ')
-						was_space = 1;
-					else
-					{
-						if(was_space)
-						{
-							token_count++;
-							was_space = 0;
-							token_scanner=0;
-						}
-
-						pointers[token_count][token_scanner] = text[scanner];
-					}
-
-					scanner++;
-					token_scanner++;
-				}
-
-				scanner+=2; //skip over newline
-				token_count++; //make it 1 indexed
-
-				// //print tokenized info
-				// {
-				// 	printf("%d. mneumonic: %s", line_number, mneumonic);
-				// 	if(token_count > 1)
-				// 		printf(" arg1: %s", arg1);
-				// 	if(token_count > 2)
-				// 		printf(" arg2: %s", arg2);
-				// 	printf("\n");
-				// }
-				int mneumonic_id;
-				//look up id
-				{
-					mneumonic_id = -1;
-
-					for(int i = 0; i < mneumonic_count; i++)
-					{					
-						if(strcmp(mneumonic, mneumonic_names[i]) == 0)
-						{
-							mneumonic_id = i;
-							break;
-						}
-					}
-				}
-
-				if(mneumonic_id == -1)
-				{
-					printf("invalid instruction at line: %d\n", line_number);
-					return -1;
-				}
-
-
-				switch(mneumonic_id)
-				{
-					case load_immediate:
-					{
-						if(arg1[0] == 'A')
-							output_data[current_data_word] = 12;
-						else if(arg1[0] == 'B')
-							output_data[current_data_word] = 13;
-
-						char* end;
-						output_data[current_data_word+1] = strtoul(arg2,&end,10);//todo parse hex values too;
-
-						// printf("here is the value: %s\n", arg2);
-						// printf("%llu\n", output_data[current_data_word+1]);
-
-
-						// printf("load instruction:\n");
-						// unsigned char* as_bytes = (unsigned char*)(output_data);
-						// for (int i = current_data_word*8; i < current_data_word*8+16; ++i)
-						// {
-						// 	printf("%02x ", (unsigned int)as_bytes[i]);
-						// }		
-						// printf("\n");										
-						current_data_word += 2;
-						// Sleep(50);
-					} break;
-					case load_memory:
-					{
-						if(arg1[0] == 'A')
-							output_data[current_data_word] = 14;
-						else if(arg1[0] == 'B')
-							output_data[current_data_word] = 15;
-
-						char* end;
-						output_data[current_data_word+1] = strtoul(arg2,&end,10);//todo parse hex values too;
-
-						// printf("here is the value: %s\n", arg2);
-						// printf("%llu\n", output_data[current_data_word+1]);
-
-
-						// printf("load instruction:\n");
-						// unsigned char* as_bytes = (unsigned char*)(output_data);
-						// for (int i = current_data_word*8; i < current_data_word*8+16; ++i)
-						// {
-						// 	printf("%02x ", (unsigned int)as_bytes[i]);
-						// }		
-						// printf("\n");										
-						current_data_word += 2;
-						// Sleep(50);
-					} break;	
-					case store:
-					case jump_equal:
-					case jump:
-					case jump_greater_than:
-					case jump_less_than_or_equal:
-					case jump_greater_than_or_equal:
-					case jump_not_equal:
-					case jump_less_than:
-					{
-						output_data[current_data_word] = mneumonic_id;
-						char* end;
-						output_data[current_data_word+1] = strtoul(arg1,&end,10);//todo parse hex values too;
-						current_data_word+=2;						
-					} break;
-					case screen_interrupt:				
-					case nop:
-					case add:
-					case or:
-					case and:
-					case xor:
-					case left_shift:
-					case right_shift:
-					case INC:
-					case decrement:
-					case subtract:
-					case multiply:
-					case divide:
-					default:
-					{
-
-						output_data[current_data_word] = mneumonic_id;
-						current_data_word++;					
-					} break;
-				}
-
-				gloop:
-				line_number++;
+				line[i] = '\n';
+				text++;
 			}
 
-			free(text);
-			unsigned char* as_bytes = (unsigned char*)(output_data);
-			// for (int i = 0; i < current_data_word*8; ++i)
-			// {
-			// 	printf("%02x ", as_bytes[i]);
-			// 	Sleep(50);
-			// }
 
-			file = fopen("assembly.bin","wb");
-			if(file != NULL)
+			Keyword keyword = -1;
+			int cursor = 0;
+			//get keyword
 			{
-				for (int i = 0; i < current_data_word*4; ++i)
-					fputc(as_bytes[i], file);
-				fclose(file);
-			}			
+				char keyword_text[100] = {0};
+				{
+					while(line[cursor] != ' ' && line[cursor] != '\n')
+					{
+						keyword_text[cursor] = line[cursor++];
+					}
+				}
+
+				for (int i = 0; i < keyword_count; ++i)
+				{
+					if(str_eq(keyword_text, keywords[i]))
+					{
+						keyword = i;
+						break;
+					}
+				}
+			}
+
+			switch(keyword)
+			{
+				case keyw_set:
+				{
+					cursor++;
+					AddressingMode dest_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						dest_mode  = IND;
+						cursor++;
+					}
+
+					char dest_text[50] = {0};
+					int i = 0;
+					while(line[cursor] != ' ')
+					{
+						dest_text[i++] = line[cursor++];
+					}
+
+					u32 dest = parse_int(dest_text);
+					cursor++;
+					printf("next char:%c\n", line[cursor]);
+					AddressingMode val_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						val_mode  = IND;
+						cursor++;
+					}
+
+					char val_text[50] = {0};
+					i = 0;
+					while(line[cursor] != '\n')
+					{
+						val_text[i++] = line[cursor++];
+					}
+
+					u32 val = parse_int(val_text);
+					cursor++;
+					u32 res = set(dest, val, dest_mode, val_mode);
+					printf("res: %d\n", res);
+				} break;
+				case keyw_halt:
+				{
+					halt();
+				} break;
+				case keyw_jmp:
+				{
+					cursor++;
+					AddressingMode dest_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						dest_mode  = IND;
+						cursor++;
+					}
+
+					char dest_text[50] = {0};
+					int i = 0;
+					while(line[cursor] != '\n')
+					{
+						dest_text[i++] = line[cursor++];
+					}
+
+					u32 dest = parse_int(dest_text);
+					cursor++;
+
+					jmp(dest, dest_mode);		
+				} break;
+				case keyw_jlt:
+				{
+					cursor++;
+					AddressingMode dest_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						dest_mode  = IND;
+						cursor++;
+					}
+
+					char text[50] = {0};
+					int i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 dest = parse_int(text);
+					cursor++;
+
+					AddressingMode lh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						lh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 lhs = parse_int(text);
+					cursor++;
+
+
+					AddressingMode rh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						rh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != '\n')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 rhs = parse_int(text);
+					cursor++;
+
+					jlt(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
+				} break;
+				case keyw_inc:
+				{
+					cursor++;
+					char dest_text[50] = {0};
+					int i = 0;
+					while(line[cursor] != '\n')
+					{
+						dest_text[i++] = line[cursor++];
+					}
+
+					u32 dest = parse_int(dest_text);
+					cursor++;
+
+					inc(dest);		
+				} break;
+				case keyw_add:
+				{
+					cursor++;
+					AddressingMode dest_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						dest_mode  = IND;
+						cursor++;
+					}
+
+					char text[50] = {0};
+					int i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 dest = parse_int(text);
+					cursor++;
+
+					AddressingMode lh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						lh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 lhs = parse_int(text);
+					cursor++;
+
+
+					AddressingMode rh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						rh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != '\n')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 rhs = parse_int(text);
+					cursor++;
+
+					add(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
+				} break;
+				case keyw_mult:
+				{
+					cursor++;
+					AddressingMode dest_mode = IMM;
+					if(line[cursor] == '@')
+					{
+						dest_mode  = IND;
+						cursor++;
+					}
+
+					char text[50] = {0};
+					int i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 dest = parse_int(text);
+					cursor++;
+
+					AddressingMode lh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						lh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != ' ')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 lhs = parse_int(text);
+					cursor++;
+
+
+					AddressingMode rh_m = IMM;
+					if(line[cursor] == '@')
+					{
+						rh_m  = IND;
+						cursor++;
+					}
+
+					i = 0;
+					while(line[cursor] != '\n')
+					{
+						text[i++] = line[cursor++];
+					}
+					text[i] = 0;
+
+					u32 rhs = parse_int(text);
+					cursor++;
+
+					mult(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
+				} break;
+			}
 		}
+
+		u32 byte_count = (next_word-start_address)*4;
+
+		FILE *file = fopen("assembly.bin", "wb");
+		fwrite(&stronkbox.memory.RAM[start_address], byte_count,1,file);
 	}
-
-	EndTiming();
-	return 0;
 }
-

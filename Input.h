@@ -91,19 +91,19 @@ bool KeyDown(enum Keys key)
 {	return keys_down[key];	}
 
 
-void PollKeyboard()
-{
-	for (int i = 0; i < 256; i++)
-		keys_stale[i] = keys_down[i];
+// void PollKeyboard()
+// {
+// 	for (int i = 0; i < 256; i++)
+// 		keys_stale[i] = keys_down[i];
 
-	GetKeyboardState((PBYTE)keyboard_state);
+// 	GetKeyboardState((PBYTE)keyboard_state);
 
-	for (int i = 0; i < 256; i++)
-		keys_down[i] = keyboard_state[i] & 128;
+// 	for (int i = 0; i < 256; i++)
+// 		keys_down[i] = keyboard_state[i] & 128;
 
-	for (int i = 0; i < 256; i++)
-	{
-		if (!keys_down[i])
-			keys_stale[i] = false;
-	}
-}
+// 	for (int i = 0; i < 256; i++)
+// 	{
+// 		if (!keys_down[i])
+// 			keys_stale[i] = false;
+// 	}
+// }

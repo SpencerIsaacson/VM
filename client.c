@@ -13,10 +13,22 @@ static bool window_is_open = true;
 int scale_factor = 1;
 #define mem stronkbox.memory
 
+void fill_audio(void *udata, Uint8 *stream, int len)
+{
+	int *foo = (int *)stream;
+	for(int i = 0; i < len/4; i++, stronkbox.cpu.sample_cursor++)
+	{
+		foo[i] = mem.audio_buffer.samples[stronkbox.cpu.sample_cursor];
+		mem.audio_buffer.samples[stronkbox.cpu.sample_cursor] = 0;
+		if(stronkbox.cpu.sample_cursor == audio_sample_capacity)
+		{
+			stronkbox.cpu.sample_cursor = 0;
+		}
+	}
+}
+
 void main(int argc, char **argv)
 {
-	reset();
-
 	if(argc > 1)
 	{
 		if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
@@ -31,15 +43,20 @@ void main(int argc, char **argv)
 		}
 	}
 
-	FILE *file = fopen("assembly.bin", "rb");
-	fseek(file, 0, SEEK_END);
-	int c = ftell(file);
-	rewind(file);
-	fread(&stronkbox.memory.RAM[start_address],c,1,file);
-	fclose(file);
-	
+	reset();
+
+	//load rom
+	{
+		FILE *file = fopen("assembly.bin", "rb");
+		fseek(file, 0, SEEK_END);
+		int c = ftell(file);
+		rewind(file);
+		fread(&stronkbox.memory.RAM[start_address],c,1,file);
+		fclose(file);
+	}
+
 	//init();
-	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
+	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK | SDL_INIT_AUDIO);
 
     //Load Joysticks
     {
@@ -53,6 +70,19 @@ void main(int argc, char **argv)
 	            printf( "Warning: Unable to open game controller! SDL Error: %s\n", SDL_GetError() );
 	        }
         }
+    }
+
+    //Initialize Audio
+    {
+		SDL_AudioSpec want, have;
+		SDL_memset(&want, 0, sizeof(want));
+		want.freq = 48000;
+		want.format = AUDIO_S32;
+		want.channels = 1;
+		want.samples = 500;
+		want.callback = fill_audio;
+		SDL_AudioDeviceID device = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+		SDL_PauseAudioDevice(device, 0);
     }
 
 	SDL_Window *window = SDL_CreateWindow("StronkBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vm_width*scale_factor, vm_height*scale_factor, 0);
@@ -93,7 +123,7 @@ void main(int argc, char **argv)
         	}
         }
 		
-		//poll
+		//poll keyboard
 		{
 			mem.game_pads[0].buttons = 0;
 			if(GetAsyncKeyState(VK_RIGHT))
@@ -103,6 +133,14 @@ void main(int argc, char **argv)
 			if(GetAsyncKeyState(VK_LEFT))
 			{
 				mem.game_pads[0].buttons |= LEFT;
+			}
+			if(GetAsyncKeyState(VK_UP))
+			{
+				mem.game_pads[0].buttons |= UP;
+			}
+			if(GetAsyncKeyState(VK_DOWN))
+			{
+				mem.game_pads[0].buttons |= DOWN;
 			}
 
 			if(GetAsyncKeyState(VK_SPACE))
@@ -119,7 +157,6 @@ void main(int argc, char **argv)
 			{
 				mem.game_pads[0].buttons |= B;
 			}
-
 		}
 
 #define clock_rate 100000000
@@ -146,6 +183,8 @@ void main(int argc, char **argv)
     	diff = ((cur - prev) * 1000000) / freq;
     	microseconds = (u32)(diff & 0xffffffff);
     	micros += microseconds;
+
+    	//todo replace with interrupt
     	if(micros >= 16667)
     	{
 			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);

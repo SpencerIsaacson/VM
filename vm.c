@@ -17,9 +17,10 @@ typedef struct FrameBuffer
 } FrameBuffer;
 
 typedef s32 AudioSample;
+#define audio_sample_capacity 22050
 typedef struct AudioBuffer
 {
-	AudioSample samples[22050];
+	AudioSample samples[audio_sample_capacity];
 } AudioBuffer;
 
 #define capacity (15*megabyte)
@@ -44,7 +45,7 @@ typedef struct CPU
 	int PC; //program counter
 	int NPC; //next program counter.just a helper value
 	short SP; //stack pointer not in use yet
-	short sample_pointer; //not REALLY part of the CPU
+	short sample_cursor; //not REALLY part of the CPU
 	bool halted;
 } CPU;
 

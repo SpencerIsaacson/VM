@@ -1,9 +1,15 @@
 //The Legend of Zelda: Fair Use Demonstration
 #include <math.h>
 
-bool ButtonDown(int pad, ButtonName button_name)
+bool button_down(GamePad pad, ButtonName button_name)
 {
-	return ( (mem.game_pads[pad].buttons & button_name) != 0);
+	return (pad.buttons & button_name) != 0;
+}
+
+#define pad0 (mem.game_pads[0])
+bool ButtonDown(ButtonName button_name)
+{
+	return button_down(pad0, button_name);
 }
 
 print_gamepad(int pad)
@@ -11,22 +17,22 @@ print_gamepad(int pad)
 	printf(
 		"pad %d:\n{\n UP: %d\nDOWN: %d\nLEFT: %d\nRIGHT: %d\nA: %d\nB: %d\nX: %d\nY: %d\nSELECT: %d\nSTART: %d\nL1: %d\nR1: %d\nL2: %d\nR2: %d\nL3: %d\nR3:%d\nleft_stick:{ x: %d, y: %d }\nright_stick:{ x: %d, y: %d }}\n\n",
 		pad,
-		ButtonDown(pad, UP),
-		ButtonDown(pad, DOWN),
-		ButtonDown(pad, LEFT),
-		ButtonDown(pad, RIGHT),
-		ButtonDown(pad, A),
-		ButtonDown(pad, B),
-		ButtonDown(pad, X),
-		ButtonDown(pad, Y),
-		ButtonDown(pad, SELECT),
-		ButtonDown(pad, START),
-		ButtonDown(pad, L1),
-		ButtonDown(pad, R1),
-		ButtonDown(pad, L2),
-		ButtonDown(pad, R2),
-		ButtonDown(pad, L3),
-		ButtonDown(pad, R3),
+		ButtonDown(UP),
+		ButtonDown(DOWN),
+		ButtonDown(LEFT),
+		ButtonDown(RIGHT),
+		ButtonDown(A),
+		ButtonDown(B),
+		ButtonDown(X),
+		ButtonDown(Y),
+		ButtonDown(SELECT),
+		ButtonDown(START),
+		ButtonDown(L1),
+		ButtonDown(R1),
+		ButtonDown(L2),
+		ButtonDown(R2),
+		ButtonDown(L3),
+		ButtonDown(R3),
 		mem.game_pads[pad].sticks.left_stick.X,
 		mem.game_pads[pad].sticks.left_stick.Y,
 		mem.game_pads[pad].sticks.right_stick.X,
@@ -80,8 +86,9 @@ typedef enum
 	FileSelect,
 	Field,
 	Dungeon,
+	Paused,
 	scene_count,
-} Scene;
+} GameState;
 
 typedef struct
 {
@@ -108,6 +115,28 @@ typedef struct
 
 typedef struct
 {
+	float 
+	left, 
+	bottom, 
+	back,
+	right, 
+	top, 
+	front; 
+} Cube;
+
+bool cube_intersect(Cube a, Cube b)
+{
+	return 
+	a.left < b.right && 
+	b.left < a.right &&
+	a.bottom < b.top &&
+	b.bottom < a.top &&
+	a.back < b.front &&
+	b.back < a.front;
+}
+
+typedef struct
+{
 	float x,y,z;
 } v3;
 #define v3_zero ((v3){0, 0, 0})
@@ -118,6 +147,12 @@ typedef struct
 	v3 rotation;
 	v3 scale;
 } Transform;
+
+typedef struct
+{
+	v3 a, b, c;
+}
+Triangle;
 
 v3 v3_add(v3 a, v3 b)
 {    return (v3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
@@ -161,14 +196,39 @@ typedef enum
 	Enemy,
 	Block,
 	Pickup,
+	Trigger,
 } Entity_Type;
+
+typedef enum
+{
+	Heart,
+	Rupee,
+	Key,
+	Fairy,
+	HeartContainer,
+	Item,
+	Sword,
+} PickupType;
+
+typedef enum
+{
+	Bomb,
+	Boomerang,
+
+} ItemType;
+
 typedef struct Entity
 {
 	Entity_Type entity_type;
 	struct Entity* parent;
 	Transform transform;
+	int health;
+	bool skip_draw;
+	bool solid;
+	Color color;
+	PickupType pickup_type;
+	int var;
 } Entity;
-
 
 typedef enum
 {
@@ -178,6 +238,13 @@ typedef enum
 	RunningBackwards,
 	Slashing, 
 } PlayerAnimationState;
+
+typedef struct
+{
+	char text[10];
+	void (*action)(void);
+} Command;
+
 typedef struct
 {
 	int cur_health;
@@ -189,15 +256,21 @@ typedef struct
 	#define max_entitites 400
 	int entity_count;
 	Entity entities[max_entitites];
-	Scene current_scene;
+	GameState current_gamestate;
+	GameState previous_gamestate;
 	Transform camera;
 	//assets
 	Sprite heart;
 	Sprite hearts[4];
-} GameState;
+	float delta_time;
+	GamePad previous_padstate;
+	PlayerAnimationState player_animation_state;
+	float anim_timer;
+	Command *current_command;
+} GameStatus;
 
 
-GameState *g = (GameState *)&mem.RAM[start_address];
+GameStatus *g = (GameStatus *)&mem.RAM[start_address];
 
 fill_rect(Color color, Rect rect)
 {
@@ -211,6 +284,11 @@ fill_rect(Color color, Rect rect)
 	{
 		mem.frame_buffer.pixels[_y*vm_width+_x] = color;
 	}
+}
+
+Transform t_from_v_and_s(v3 v, float s)
+{
+	return (Transform){v.x,v.y,v.z, 0,0,0,s,s,s};
 }
 
 #define unit_size 16
@@ -227,26 +305,102 @@ void render_rect(Color color, Transform t)
 		height});
 }
 
+Cube transform_to_cube(Transform t)
+{
+	Cube c =  (Cube)
+	{
+		t.position.x-t.scale.x/2,
+		t.position.y-t.scale.y/2,
+		t.position.z-t.scale.z/2,
+		t.position.x+t.scale.x/2,
+		t.position.y+t.scale.y/2,
+		t.position.z+t.scale.z/2,
+	};
+	return c;
+}
+
+print_cube(Cube c)
+{
+	printf("cube: { ");
+	float *p = (float*)&c;
+	for (int i = 0; i < 6; ++i)
+	{
+		printf("%f, ", p[i]);
+	}
+	printf(" }\n");	
+}
+
+Entity block(Transform t)
+{
+	return 
+	(Entity)
+	{
+		.entity_type = Block,
+		.transform = t,
+		.color = 0xAAAAAA,
+		.solid = true,
+	};
+}
+
 #define player (g->entities[0])
 #define default_transform {0,0,0,0,0,0,1,1,1}
+void generate_terrain(int subdivs_x, int subdivs_z);
+void draw_terrain();
+
 init()
 {
-	*g = (GameState)
+	*g = (GameStatus)
 	{
-		.cur_health = 25,
+		.cur_health = 20,
 		.max_health = 40,
-		.cur_magic = 80,
+		.cur_magic = 100,
 		.max_magic = 100,
-		.current_scene = Field,
-		.entity_count = 1,
+		.current_gamestate = Field,
+		.entity_count = 11,
+		.entities =
+		{
+			{
+				.entity_type = Player,
+				.transform = default_transform,
+				.color = green,
+			},
+			block((Transform){-3,0,1,0,0,0,1,1,1}),
+			block((Transform){-2,0,2,0,0,0,1,1,1}),
+			block((Transform){-1,0,3,0,0,0,1,1,1}),
+			block((Transform){-0,0,4,0,0,0,1,1,1}),
+			block((Transform){-1,0,5,0,0,0,1,1,1}),
+			block((Transform){-2,0,6,0,0,0,1,1,1}),
+			{
+				.entity_type = Enemy,
+				.transform = (Transform){4,0,0,0,0,0,1,1,1},
+				.color = red,
+				.solid = true,
+			},
+			{
+				.entity_type = Pickup,
+				.pickup_type = Heart,
+				.transform = (Transform){4,0,-2,0,0,0,.5f,.5f,.5f},
+				.color = red,
+				.solid = false,
+			},
+			{
+				.entity_type = Pickup,
+				.pickup_type = HeartContainer,
+				.transform = (Transform){4,0,-3,0,0,0,1,1,1},
+				.color = red,
+				.solid = false,
+			},
+			{
+				.entity_type = Pickup,
+				.pickup_type = Rupee,
+				.transform = (Transform){-2,0,-3,0,0,0,.5f,.5f,1},
+				.color = green,
+				.solid = false,
+				.var = 1,
+			},											
+		},
 	};
 
-	g->entities[0] = (Entity)
-	{
-		.entity_type = Player,
-		.parent = 0,
-		.transform = default_transform,
-	};
 
 	g->camera = (Transform){0,0,-1,0,0,0,.2,.2,.2};
 	for (int i = 0; i < sprite_size*sprite_size; ++i)
@@ -258,6 +412,7 @@ init()
 		g->hearts[3].pixels[i] = 0xFF5555;
 	}
 
+	generate_terrain(4,4);
 }
 
 memset_u32_4wide(u32 *p, int value, int count)
@@ -328,8 +483,6 @@ gradient(Color a, Color b, int h)
 	}
 }
 
-
-
 sky()
 {
 	gradient(0x0055FF, white,100);
@@ -342,8 +495,22 @@ mountains()
 
 fill_circle(Color color, v2i center, float radius)
 {
-	for (int x = 0; x < vm_width; ++x)
-	for (int y = 0; y < vm_height; ++y)	
+
+	int x_min = (int)(center.x-radius);
+	if(x_min < 0)
+		x_min = 0;
+	int x_max = (int)(center.x+radius);
+	if(x_max > vm_width)
+		x_max = vm_width;
+	int y_min = (int)(center.y-radius);
+	if(y_min < 0)
+		y_min = 0;
+	int y_max = (int)(center.y+radius);
+	if(y_max > vm_height)
+		y_max = vm_height;
+	//todo bounding box
+	for (int x = x_min; x < x_max; ++x)
+	for (int y = y_min; y < y_max; ++y)	
 	{
 		float dist_from_center = v2i_dist((v2i){x,y}, center);
 		if(dist_from_center <= radius)
@@ -351,6 +518,24 @@ fill_circle(Color color, v2i center, float radius)
 			mem.frame_buffer.pixels[y*vm_width+x] = color;
 		}
 	}
+}
+
+bool line_circle_intersect(v3 start, v3 end, v3 center, float radius)
+{
+	bool ret = false;
+
+	v3 a = v3_sub(center,start);
+	v3 b = v3_sub(end,start);
+	v3 c = v3_scale(v3_normalized(b), v3_project(a,b));
+	c = v3_add(c,start);
+
+	if(
+	(v3_dist(start,center) < radius) ||
+	(v3_dist(end,center) < radius) ||
+	((v3_dist(center,c) < radius) && (c.x >= start.x && c.x <= end.x)))
+		return true;
+
+	return false;
 }
 
 sun()
@@ -386,26 +571,34 @@ file_select()
 
 field()
 {
+	printf("%d\n",g->max_health);
 	v3 forward;
 	v3 right;
 	v3 hand;
 	v3 sword_tip;
-	static v3 player_forward;
+	static v3 player_forward = v3_forward;
 	//update
 	{
+		if(ButtonDown(START) && !button_down(g->previous_padstate,START))
+		{
+			g->previous_gamestate = Field;
+			g->current_gamestate = Paused;
+			return;
+		}
+
 		//player motion
 		{
 			//note:for now assume player is entity 0, this may change
 			float speed = 7;
 			v3 move_vector = v3_zero;
 
-			if(ButtonDown(0, UP))
+			if(ButtonDown(UP))
 				move_vector.z = 1;
-			else if (ButtonDown(0,DOWN))
+			else if (ButtonDown(DOWN))
 				move_vector.z = -1;
-			if (ButtonDown(0,LEFT))
+			if (ButtonDown(LEFT))
 				move_vector.x = -1;
-			else if(ButtonDown(0,RIGHT))
+			else if(ButtonDown(RIGHT))
 				move_vector.x = 1;
 
 			if(v3_mag(move_vector) > 1)
@@ -419,6 +612,10 @@ field()
 				forward = v3_normalized(forward);
 			right = (v3){forward.z, 0, -forward.x};
 
+			//temporarily align with axes while in 2D as a bodge, delete these 2 lines when returning to 3d 
+			//forward = (v3){0,0,1};
+			//right = (v3){1,0,0};
+
 			//transform move_vector to be camera relative
 			v3 forward2 = v3_scale(forward,move_vector.z);
 			v3 right2 = v3_scale(right, move_vector.x);
@@ -428,14 +625,66 @@ field()
 			if(v3_mag(move_vector) > 0) player_forward = move_vector;
 
 			//todo actually base delta time on clock
-			float delta_time = 0.01f;
 			move_vector = v3_scale(move_vector, speed);
-			move_vector = v3_scale(move_vector, delta_time);
-			player.transform.position =  v3_add(player.transform.position, move_vector);
+			move_vector = v3_scale(move_vector, g->delta_time);
 
+			//apply motion and handle collision
+			{
+				#define t1 player.transform
+				#define t2 g->entities[i].transform
+				v3 old = t1.position;
+				t1.position.x += move_vector.x;
+
+				for (int i = 1; i < g->entity_count; ++i)
+				{
+					if(g->entities[i].solid)
+					if(cube_intersect(transform_to_cube(t1), transform_to_cube(t2)))
+					{
+						if(old.x < t2.position.x)
+							t1.position.x = t2.position.x-((t1.scale.x+t2.scale.x)/2);
+						else
+							t1.position.x = t2.position.x+((t1.scale.x+t2.scale.x)/2);
+					}
+				}
+
+
+				old = t1.position;
+				t1.position.y += move_vector.y;
+				
+				for (int i = 1; i < g->entity_count; ++i)
+				{
+					if(g->entities[i].solid)
+					if(cube_intersect(transform_to_cube(t1), transform_to_cube(t2)))
+					{
+						if(old.y < t2.position.y)
+							t1.position.y = t2.position.y-((t1.scale.y+t2.scale.y)/2);
+						else
+							t1.position.y = t2.position.y+((t1.scale.y+t2.scale.y)/2);
+					}
+				}
+
+				old = t1.position;
+				t1.position.z += move_vector.z;
+				
+				for (int i = 1; i < g->entity_count; ++i)
+				{
+					if(g->entities[i].solid)
+					if(cube_intersect(transform_to_cube(t1), transform_to_cube(t2)))
+					{
+						if(old.z < t2.position.z)
+							t1.position.z = t2.position.z-((t1.scale.z+t2.scale.z)/2);
+						else
+							t1.position.z = t2.position.z+((t1.scale.z+t2.scale.z)/2);
+					}
+				}
+				
+				#undef t1
+				#undef t2
+			}
+			
 			//lerp camera to target position
 			v3 target = v3_sub(player.transform.position, v3_scale(forward,follow_distance));
-			g->camera.position = v3_lerp(g->camera.position, target,.05f);
+			g->camera.position = v3_lerp(g->camera.position, target,g->delta_time);
 
 			right = v3_add(right, g->camera.position);
 			forward = v3_add(forward, g->camera.position);
@@ -448,11 +697,64 @@ field()
 			sword_tip = v3_rotate_xz_plane(sword_tip, player.transform.rotation.y);
 			sword_tip = v3_add(sword_tip,hand);
 
-			float theta = player.transform.rotation.y;
-			printf("theta:%f\n", theta);
-			//transform hand_direction;
-			//sword_tip = v3_add(player.transform.position, sword_tip);
+			for (int i = 1; i < g->entity_count; ++i)
+			{
+				if(cube_intersect(transform_to_cube(player.transform),transform_to_cube(g->entities[i].transform)))
+				{
+					if(g->entities[i].entity_type == Pickup)
+					{
+						switch(g->entities[i].pickup_type)
+						{
+							case Rupee:
+							{
+								g->cur_rupees+=g->entities[i].var;
+							} break;
+							case Fairy:
+							{
+								g->cur_health = g->max_health;
+							} break;
+							case HeartContainer:
+							{
+								g->max_health += 4;
+								if(g->max_health > 80)
+									g->max_health = 80;
+							} break;
+							case Heart:
+							{
+								g->cur_health += 4;
+								if(g->cur_health > g->max_health)
+									g->cur_health = g->max_health;
+							} break;
+						}
+					}
+				}
+
+				if(g->entities[i].entity_type == Enemy)
+				if(g->player_animation_state == Slashing && line_circle_intersect(hand, sword_tip, g->entities[i].transform.position, g->entities[i].transform.scale.x/2))
+				{
+					g->entities[i].health--;
+					if(g->entities[i].health<=0)
+						g->entities[i] = g->entities[--(g->entity_count)];
+				}
+			}
 		}
+
+		if(ButtonDown(X) && g->player_animation_state != Slashing)
+		{
+			g->player_animation_state = Slashing;
+			g->anim_timer = .25f;
+		}
+		
+		if(ButtonDown(A))
+		{
+			if(g->current_command != NULL)
+				g->current_command->action();
+		}
+
+		if(g->anim_timer > 0)
+			g->anim_timer-=g->delta_time;
+		else 
+			g->player_animation_state = Idle;
 	}
 
 	//render
@@ -464,22 +766,29 @@ field()
 			sun();
 		}
 
-		render_rect(green, player.transform);
+		for (int i = 0; i < g->entity_count; ++i)
+		{
+			if(!g->entities[i].skip_draw)
+			{
+				render_rect(g->entities[i].color, g->entities[i].transform);
+			}
+		}
 
-		render_rect(red, g->camera);
-		Transform temp_t = (Transform){forward.x,forward.y,forward.z, 0,0,0,.2,.2,.2};
-		render_rect(blue, temp_t);
-		temp_t = (Transform){right.x,right.y,right.z, 0,0,0,.2,.2,.2};
-		render_rect(red, temp_t);
+		render_rect(green, g->camera);
+		render_rect(blue, t_from_v_and_s(forward,.2f));
+		render_rect(red, t_from_v_and_s(right,.2f));
 
-		temp_t = (Transform){ hand.x, hand.y, hand.z, 0, 0, 0, .3f, .3f, .3f};
-		render_rect(0x555555, temp_t);
-		temp_t = (Transform){ sword_tip.x, sword_tip.y, sword_tip.z, 0, 0, 0, .3f, .3f, .3f};
-		render_rect(0x555555, temp_t);
+		if(g->player_animation_state == Slashing)
+		{
+			render_rect(0x555555, t_from_v_and_s(hand,.3f));
+			render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
+		}
 
 		//HUD
+		if(false)
 		{
 			//todo get heart sprites to replace these squares with
+			if(true)
 			//health bar
 			{
 				int full_hearts = g->cur_health / 4; 
@@ -491,7 +800,7 @@ field()
 				int y_offset = 6;
 				int x_padding = 2;
 				int y_padding = 2;
-				int hearts_per_row = 5;
+				int hearts_per_row = 10;
 
 				int i;
 				for (i = 0; i < full_hearts; ++i)
@@ -526,16 +835,69 @@ field()
 				//todo grab fontset file from platfighter project for text drawing
 			}
 
-			//items
+			//command buttons
 			{
+				fill_circle(blue, (v2i){vm_width/2+32,48}, 32);
 
+				//todo render
+				{
+					if(g->current_command != NULL)
+					printf(g->current_command->text);
+				}
+			}
+
+			//item buttons
+			{
+				fill_circle(yellow,(v2i){vm_width-(32+32+32+32),32}, 16);
+				fill_circle(yellow,(v2i){vm_width-(32+32+32), 64}, 16);
+				fill_circle(yellow,(v2i){vm_width-(32+32),32}, 16);
 			}
 		}
+
+		//triangle r&d
+		if(false)
+		{
+			Triangle tri = (Triangle)
+			{
+				{100,100,0},
+				{200,100,0},
+				{100,200,0},
+			};
+
+			Sleep(100);
+
+			v3 edge1 = v3_sub(tri.b,tri.a);
+			v3 edge2 = v3_sub(tri.c,tri.a);
+
+			printf("1:{%f,%f,%f}\n", edge1.x, edge1.y, edge1.z);
+			printf("2:{%f,%f,%f}\n", edge2.x, edge2.y, edge2.z);		
+			fill_rect(red, (Rect){tri.a.x,tri.a.y,5,5});
+			fill_rect(red, (Rect){tri.b.x,tri.b.y,5,5});
+			fill_rect(red, (Rect){tri.c.x,tri.c.y,5,5});
+
+			v3 bary = {.5f,.25f,.25f};
+			v3 d = v3_add(v3_add(v3_scale(tri.a,bary.x),v3_scale(tri.b,bary.y)), v3_scale(tri.c,bary.z));
+			printf("d: {%f,%f}", d.x,d.y);
+			fill_rect(red, (Rect){(int)d.x,(int)d.y,5,5});
+		}
+
+		draw_terrain();
 	}
 }
 
 dungeon()
 {
+
+}
+
+paused()
+{
+	fill_rect(red,(Rect){10,10,vm_width-20,vm_height-20});
+	if(ButtonDown(START) && !button_down(g->previous_padstate,START)){
+		printf("foo!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		g->current_gamestate = g->previous_gamestate;
+		g->previous_gamestate = 0;
+	}
 
 }
 
@@ -546,16 +908,100 @@ void (*scenes[scene_count])(void) =
 	[FileSelect] = &file_select,
 	[Dungeon] = &dungeon,
 	[Field] = &field,
+	[Paused] = &paused,
 };
 
 void _tick()
 {
-	(scenes[g->current_scene])();
+	Sleep(10);
+	//print_gamepad(0);
+	(scenes[g->current_gamestate])();
+	g->previous_padstate = mem.game_pads[0];
 }
 
-
-generate_terrain()
+int vertex_count = 0;
+v3 vertices[1000];
+int index_count;
+int indices[1000];
+void generate_terrain(int subdivs_x, int subdivs_z)
 {
-	//todo (first get basic triangle rendering up and running)
+	int verts_wide = subdivs_x+1;
+	int verts_deep = subdivs_z+1;
+	vertex_count = (verts_wide)*(verts_deep);
+	index_count = 6*subdivs_x*subdivs_z;
+	printf("vertex count: %d", vertex_count);
 
+	for (int z = 0; z < verts_deep; ++z)
+	for (int x = 0; x < verts_wide; ++x)
+	{
+		vertices[z*verts_wide+x] = (v3){x,0,z};
+	}
+
+	int origin = 0;
+	for (int i = 0; i < index_count; i+=6)
+	{
+		//if origin vertex at end of row, skip and start next row
+		if(origin > 0 && (((i/6) % subdivs_x) == 0))
+			origin++;
+		indices[i] = origin;
+		indices[i+1] = origin+1;
+		indices[i+2] = origin+subdivs_x+1;
+		indices[i+3] = origin+subdivs_x+2;
+		indices[i+4] = origin+subdivs_x+1;
+		indices[i+5] = origin+1;
+
+		origin++;
+	}
+
+	printf("vertices: %d\n", vertex_count);
+	for (int i = 0; i < vertex_count; ++i)
+	{
+		printf("%d: {%f,%f,%f}\n", i, vertices[i].x,vertices[i].y,vertices[i].z);
+	}
+	printf("indices: %d\n", index_count);
+	for (int i = 0; i < index_count; ++i)
+	{
+		printf("\t%d: %d\n", i, indices[i]);
+	}
 }
+
+void draw_terrain()
+{
+	static float foo=0;
+	// for (int i = 0; i < index_count; i++)
+	// {
+	// 	v3 vertex = vertices[indices[i]];
+	// 	fill_rect(white, (Rect){vertex.x*10,vertex.z*10,5,5});
+	// }
+	static int offset=0;
+	v3 a = vertices[indices[offset+0]];
+	v3 b = vertices[indices[offset+1]];
+	v3 c = vertices[indices[offset+2]];
+	fill_rect(red, (Rect){a.x*10,a.z*10,5,5});
+	fill_rect(green, (Rect){b.x*10,b.z*10,5,5});
+	fill_rect(blue, (Rect){c.x*10,c.z*10,5,5});
+
+	foo+=g->delta_time;
+	if(foo>.5f)
+	{
+		foo = 0;
+		offset+=3;
+	}
+}
+
+//notes
+/*
+things to implement:
+push blocks, torches,
+doors, locked doors, shop, signs, octorocks, shield, jumping over gaps, climbing up ledges
+you will need triangle rendering, meshes, particles, skeletal animation, 
+7/3/2023
+After work today, I need to implement a) basic triangle rasterization b) generalize drawing to have a "global texture"
+so that you can switch from drawing to the screen to drawing into sprites, texture maps, etc.
+
+Once you have basic triangle rasteriztion in place, you need to add a basic 3d transform pipeline.
+
+Then do terrain (including collision). Then do animation (you don't necessarily need a complete animation system, possibly just some basic lerps and easing functions),
+
+Then start working on making prettier assets
+*/

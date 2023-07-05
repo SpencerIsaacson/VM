@@ -96,10 +96,15 @@ void main(int argc, char **argv)
 	u32 micros = 0;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 	QueryPerformanceCounter((LARGE_INTEGER*)&prev);
+
     while (window_is_open)
     {
     	if(GetAsyncKeyState(VK_ESCAPE))
     		return;
+		if(GetAsyncKeyState('R'))
+		{
+			init();
+		}
         SDL_Event event;
         while (SDL_PollEvent(&event)) 
         {
@@ -169,7 +174,7 @@ void main(int argc, char **argv)
 
 			if(GetAsyncKeyState(VK_SPACE))
 			{
-				mem.game_pads[0].buttons |= A;
+				mem.game_pads[0].buttons |= START;
 			}
 
 			if(GetAsyncKeyState('F'))
@@ -177,15 +182,20 @@ void main(int argc, char **argv)
 				mem.game_pads[0].buttons |= X;
 			}
 			
-			if(GetAsyncKeyState('R'))
+			if(GetAsyncKeyState('G'))
 			{
 				mem.game_pads[0].buttons |= B;
 			}
 		}
 
+		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+		diff = ((cur - prev) * 1000000) / freq;
+		unsigned int microseconds = (unsigned int)(diff & 0xffffffff);
+		g->delta_time = microseconds/1000000.0f;
 		_tick();
 		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
     	SDL_UpdateWindowSurface(window);
+		prev = cur;
 // #define clock_rate 100000000
 // #define tick_count 100
 // #define interval 1000000/clock_rate*tick_count

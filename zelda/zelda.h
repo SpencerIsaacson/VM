@@ -94,7 +94,10 @@ typedef struct
 {
 	int x, y;
 } v2i;
-
+typedef struct
+{
+	float x, y;
+} v2f;
 float v2i_mag(v2i v)
 {
 	return (float)sqrt(v.x * v.x + v.y * v.y);
@@ -187,6 +190,135 @@ float v3_project(v3 a, v3 b)
 v3 v3_rotate_xz_plane(v3 v, float t)
 {
 	return (v3){cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z};
+}
+
+//returns the screen space barycentric point represented by a cartesian coordinate and the associated triangle
+v3 to_barycentric(Triangle tri, v2i cartesian)
+{
+	v3 cart = {cartesian.x, cartesian.y, 0};
+
+	v3 bary;
+	v3 edge1 = v3_sub(tri.a,tri.c);
+	v3 edge2 = v3_sub(tri.b,tri.c);
+	v3 p = edge1;
+	v3 q = edge2;
+	float det = p.x*q.y-p.y*q.x;
+	p.x=edge2.y;
+	q.y=edge1.x;
+	p.y=-p.y;
+	q.x=-q.x;
+	p = v3_div(p,det);
+	q = v3_div(q,det);
+	cart = v3_sub(cart,tri.c);
+	bary.x = p.x*cart.x+q.x*cart.y;
+	bary.y = p.y*cart.x+q.y*cart.y;
+	bary.z = 1-(bary.x+bary.y);
+
+	return bary;	
+	// float denom = ((tri.b.y-tri.c.y)*(tri.a.x-tri.c.x))+((tri.c.x-tri.b.x)*(tri.a.y-tri.c.y));
+	// float a = ((tri.b.y-tri.c.y)*(cartesian.x-tri.c.x))+((tri.c.x-tri.b.x)*(cartesian.y-tri.c.y))/denom;
+	// float b = ((tri.c.y-tri.a.y)*(cartesian.x-tri.c.x))+((tri.a.x-tri.c.x)*(cartesian.y-tri.c.y))/denom;
+	// float c = 1-a-b;
+	// return (v3){a,b,c};
+}
+
+//returns the screen space cartesian point represented by a barycentric coordinate and the associated triangle
+v2i to_cartesian(Triangle tri, v3 bary)
+{
+	v3 v = v3_add(v3_add(v3_scale(tri.a, bary.x), v3_scale(tri.b, bary.y)), v3_scale(tri.c, bary.z));
+	return (v2i){(int)v.x,(int)v.y};
+}
+
+typedef struct
+{
+	int pixel_index;
+	v3 bary;
+}
+RasterEntry;
+
+typedef struct
+{
+	int entry_count;
+	RasterEntry entries[10000];//todo deal with allocation
+} RasterList;
+
+int min_3(int a, int b, int c)
+{
+	int res = a;
+	if(b < res)
+		res = b;
+	if(c < res)
+		res = c;
+	return res;
+}
+int max_3(int a, int b, int c)
+{
+	int res = a;
+	if(b > res)
+		res = b;
+	if(c > res)
+		res = c;
+	return res;
+}
+
+void fill_triangle(Triangle tri, Color col)
+{
+
+	//bounding box
+	int x_min = min_3(tri.a.x, tri.b.x, tri.c.x);
+	int x_max = max_3(tri.a.x, tri.b.x, tri.c.x);
+	int y_min = min_3(tri.a.y, tri.b.y, tri.c.y);
+	int y_max = max_3(tri.a.y, tri.b.y, tri.c.y);
+	
+	if(x_min < 0)
+		x_min = 0;
+	if(y_min < 0)
+		y_min = 0;
+
+	if(x_max > vm_width-1)
+		x_max = vm_width-1;
+	
+	if(y_max > vm_height-1)
+		y_max = vm_height-1;
+
+	for (int y = y_min; y < y_max; ++y)
+	for (int x = x_min; x < x_max; ++x)
+	{
+		v2i v = (v2i){x,y};
+		v3 bary = to_barycentric(tri,v);
+
+		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
+		{
+			mem.frame_buffer.pixels[y*vm_width+x] = col;
+		}
+	}	
+}
+
+RasterList triangle_to_rasterlist(Triangle tri)
+{
+	//todo bounding box
+	RasterList list = {.entry_count = 0};
+	for (int y = 0; y < vm_height; ++y)
+	for (int x = 0; x < vm_width; ++x)
+	{
+		v2i v = (v2i){x,y};
+		v3 bary = to_barycentric(tri,v);
+
+		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
+		{
+			list.entries[list.entry_count++] = (RasterEntry){.pixel_index = y*vm_width+x, .bary = bary};
+		}
+	}
+
+	return list;
+}
+
+fill_rasterlist(RasterList list, Color col)
+{
+	for (int i = 0; i < list.entry_count; ++i)
+	{
+		mem.frame_buffer.pixels[list.entries[i].pixel_index] = col;
+	}
 }
 
 typedef enum
@@ -344,7 +476,7 @@ Entity block(Transform t)
 
 #define player (g->entities[0])
 #define default_transform {0,0,0,0,0,0,1,1,1}
-void generate_terrain(int subdivs_x, int subdivs_z);
+void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
 void draw_terrain();
 
 init()
@@ -412,7 +544,7 @@ init()
 		g->hearts[3].pixels[i] = 0xFF5555;
 	}
 
-	generate_terrain(4,4);
+	generate_terrain(25,25,1,1);
 }
 
 memset_u32_4wide(u32 *p, int value, int count)
@@ -571,12 +703,12 @@ file_select()
 
 field()
 {
-	printf("%d\n",g->max_health);
 	v3 forward;
 	v3 right;
 	v3 hand;
 	v3 sword_tip;
 	static v3 player_forward = v3_forward;
+	if(false)
 	//update
 	{
 		if(ButtonDown(START) && !button_down(g->previous_padstate,START))
@@ -759,36 +891,38 @@ field()
 
 	//render
 	{
-		//environment
+		//scene
+		if(false)
 		{
-			sky();
-			mountains();
-			sun();
-		}
-
-		for (int i = 0; i < g->entity_count; ++i)
-		{
-			if(!g->entities[i].skip_draw)
+			//environment
 			{
-				render_rect(g->entities[i].color, g->entities[i].transform);
+				sky();
+				mountains();
+				sun();
+			}
+
+			for (int i = 0; i < g->entity_count; ++i)
+			{
+				if(!g->entities[i].skip_draw)
+				{
+					render_rect(g->entities[i].color, g->entities[i].transform);
+				}
+			}
+
+			render_rect(green, g->camera);
+			render_rect(blue, t_from_v_and_s(forward,.2f));
+			render_rect(red, t_from_v_and_s(right,.2f));
+
+			if(g->player_animation_state == Slashing)
+			{
+				render_rect(0x555555, t_from_v_and_s(hand,.3f));
+				render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
 			}
 		}
-
-		render_rect(green, g->camera);
-		render_rect(blue, t_from_v_and_s(forward,.2f));
-		render_rect(red, t_from_v_and_s(right,.2f));
-
-		if(g->player_animation_state == Slashing)
-		{
-			render_rect(0x555555, t_from_v_and_s(hand,.3f));
-			render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
-		}
-
 		//HUD
 		if(false)
 		{
-			//todo get heart sprites to replace these squares with
-			if(true)
+			//todo create heart sprites to replace these squares with
 			//health bar
 			{
 				int full_hearts = g->cur_health / 4; 
@@ -855,32 +989,72 @@ field()
 		}
 
 		//triangle r&d
-		if(false)
+		if(true)
 		{
+
+			for (int i = 0; i < vm_width*vm_height; ++i)
+			{
+				mem.frame_buffer.pixels[i] = 0;
+			}
+
 			Triangle tri = (Triangle)
 			{
-				{100,100,0},
-				{200,100,0},
-				{100,200,0},
+				.a = {120,50,0},
+				.b = {100,75,0},
+				.c = {130,100,0},
 			};
 
-			Sleep(100);
+			for (int i = 0; i < 1000; ++i)
+			{
+				v2i center = (v2i){rand()%(vm_width-1),rand()%(vm_height-1)};
 
-			v3 edge1 = v3_sub(tri.b,tri.a);
-			v3 edge2 = v3_sub(tri.c,tri.a);
+				Triangle tri = (Triangle)
+				{
+					.a = {center.x+rand()%(20),center.y+rand()%(20)},
+					.b = {center.x+rand()%(20),center.y+rand()%(20)},
+					.c = {center.x+rand()%(20),center.y+rand()%(20)},
+				};
 
-			printf("1:{%f,%f,%f}\n", edge1.x, edge1.y, edge1.z);
-			printf("2:{%f,%f,%f}\n", edge2.x, edge2.y, edge2.z);		
-			fill_rect(red, (Rect){tri.a.x,tri.a.y,5,5});
-			fill_rect(red, (Rect){tri.b.x,tri.b.y,5,5});
-			fill_rect(red, (Rect){tri.c.x,tri.c.y,5,5});
+				fill_triangle(tri, ((rand()%255) << 16)|((rand()%255) << 8)|(rand()%255));
+			}
+			//fill_triangle(tri, white);
+			static RasterList list = {.entry_count = 0};
+			static bool first = true;
+			if(first)
+			{
+				first = false;
+				list = triangle_to_rasterlist(tri);
+			}
+			//fill_rasterlist(list, white);
+			static v2f cart = (v2f){80, 125};
+			fill_rect( blue, (Rect){cart.x-2,cart.y-2,4,4});
 
-			v3 bary = {.5f,.25f,.25f};
-			v3 d = v3_add(v3_add(v3_scale(tri.a,bary.x),v3_scale(tri.b,bary.y)), v3_scale(tri.c,bary.z));
-			printf("d: {%f,%f}", d.x,d.y);
-			fill_rect(red, (Rect){(int)d.x,(int)d.y,5,5});
+			cart.x+=.5f;
 		}
 
+		//matrix visualizer
+		if(false)
+		{
+			fill_rect(black,(Rect){0,0,vm_width,vm_height});
+			v2i origin = (v2i){100, 200};
+			int view_scale = 20;
+
+			static v2f p = { 2, -2 };
+			static v2f q = { 2, 2 };
+
+			v2f v = { .5f, 2 };
+			v2f v_prime = (v2f){v.x*p.x+v.y*q.x, v.x*p.y+v.y*q.y};
+			printf("v_prime: { %f, %f }\n",v_prime.x,v_prime.y);
+			fill_rect(white,(Rect){origin.x, origin.y, 10, 10});
+			fill_rect(red,(Rect){origin.x+(int)(view_scale*p.x), origin.y-(int)(view_scale*p.y), 10, 10});
+			fill_rect(green,(Rect){origin.x+(int)(view_scale*q.x), origin.y-(int)(view_scale*q.y), 10, 10});
+			fill_rect(magenta, (Rect){origin.x+(int)(view_scale*v_prime.x), origin.y-(int)(view_scale*v_prime.y), 10, 10});
+			q.x+=.001f;
+			q.y-=.01f;
+			p.y-=.001f;
+		}
+
+		if(false)
 		draw_terrain();
 	}
 }
@@ -913,28 +1087,26 @@ void (*scenes[scene_count])(void) =
 
 void _tick()
 {
-	Sleep(10);
 	//print_gamepad(0);
 	(scenes[g->current_gamestate])();
 	g->previous_padstate = mem.game_pads[0];
 }
 
 int vertex_count = 0;
-v3 vertices[1000];
+v3 vertices[2000];
 int index_count;
-int indices[1000];
-void generate_terrain(int subdivs_x, int subdivs_z)
+int indices[10000];
+void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z)
 {
 	int verts_wide = subdivs_x+1;
 	int verts_deep = subdivs_z+1;
 	vertex_count = (verts_wide)*(verts_deep);
 	index_count = 6*subdivs_x*subdivs_z;
-	printf("vertex count: %d", vertex_count);
 
 	for (int z = 0; z < verts_deep; ++z)
 	for (int x = 0; x < verts_wide; ++x)
 	{
-		vertices[z*verts_wide+x] = (v3){x,0,z};
+		vertices[z*verts_wide+x] = (v3){x/(float)verts_wide*scale_x,0,z/(float)verts_deep*scale_z};
 	}
 
 	int origin = 0;
@@ -952,40 +1124,14 @@ void generate_terrain(int subdivs_x, int subdivs_z)
 
 		origin++;
 	}
-
-	printf("vertices: %d\n", vertex_count);
-	for (int i = 0; i < vertex_count; ++i)
-	{
-		printf("%d: {%f,%f,%f}\n", i, vertices[i].x,vertices[i].y,vertices[i].z);
-	}
-	printf("indices: %d\n", index_count);
-	for (int i = 0; i < index_count; ++i)
-	{
-		printf("\t%d: %d\n", i, indices[i]);
-	}
 }
 
 void draw_terrain()
 {
-	static float foo=0;
-	// for (int i = 0; i < index_count; i++)
-	// {
-	// 	v3 vertex = vertices[indices[i]];
-	// 	fill_rect(white, (Rect){vertex.x*10,vertex.z*10,5,5});
-	// }
-	static int offset=0;
-	v3 a = vertices[indices[offset+0]];
-	v3 b = vertices[indices[offset+1]];
-	v3 c = vertices[indices[offset+2]];
-	fill_rect(red, (Rect){a.x*10,a.z*10,5,5});
-	fill_rect(green, (Rect){b.x*10,b.z*10,5,5});
-	fill_rect(blue, (Rect){c.x*10,c.z*10,5,5});
-
-	foo+=g->delta_time;
-	if(foo>.5f)
+	for (int i = 0; i < index_count; i++)
 	{
-		foo = 0;
-		offset+=3;
+		v3 vertex = vertices[indices[i]];
+		fill_rect(white, (Rect){(int)(vertex.x*10.1f),(int)(vertex.z*10.1f),2,2});
 	}
 }
 
@@ -1004,4 +1150,7 @@ Once you have basic triangle rasteriztion in place, you need to add a basic 3d t
 Then do terrain (including collision). Then do animation (you don't necessarily need a complete animation system, possibly just some basic lerps and easing functions),
 
 Then start working on making prettier assets
+
+7/14/2023
+All right, back to work, we got the basic rasterizer in place, so this evening do the "global texture" and get back to terrain generation (and adding terrain collision)
 */

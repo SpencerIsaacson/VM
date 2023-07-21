@@ -264,6 +264,54 @@ void tick()
 }
 
 
+void execute (int count, u32 ops[])
+{
+	for (int i = 0; i < count; ++i)
+	{
+		u32 op = ops[i];
+		OpCode opcode = (op & 0x1F000000) >> 24;
+		switch(opcode)
+		{
+			case OP_NOP:
+				break;
+			case OP_SET:
+				break;
+			case OP_MULT:
+				break;
+			case OP_INC:
+				break;
+			case OP_ADD:
+			{
+				u32 *a;
+				u32 *b;	
+				u32 *c;
+				
+				if(a_mode(opcode))
+					a = &RAM[RAM[RAM[PC+1]]];
+				else
+					a = &RAM[RAM[PC+1]];
+
+				if(b_mode(opcode))
+					b = &RAM[RAM[PC+2]];
+				else
+					b = &RAM[PC+2];
+				
+				if(c_mode(opcode))
+					c = &RAM[RAM[PC+3]];
+				else
+					c = &RAM[PC+3];
+				
+				*a = (*b) + (*c);
+			} break;
+			case OP_JLT:
+				break;
+			case OP_JMP:
+				break;
+			case OP_HALT:
+				break;
+		}
+	}
+}
 #undef RAM
 #undef A
 #undef B

@@ -63,7 +63,7 @@ void main(int argc, char **argv)
     {
         //todo allow plugging in and removing joysticks at runtime
         int joy_count = SDL_NumJoysticks();
-        printf("JOY COUNT: %d\n", joy_count);
+        //printf("JOY COUNT: %d\n", joy_count);
         for (int i = 0; i < joy_count; ++i)
         {
 			SDL_Joystick* game_controller = SDL_JoystickOpen( i );
@@ -114,23 +114,26 @@ void main(int argc, char **argv)
                     window_is_open = false;
                     break;
                 case SDL_JOYAXISMOTION:
+                {
                     if( event.jaxis.axis == 0 )
                     	mem.game_pads[0].sticks.left_stick.X =  (signed char)((event.jaxis.value/((float)SHRT_MAX))*127);
                     else if( event.jaxis.axis == 1 )
                        mem.game_pads[0].sticks.left_stick.Y = -(signed char)((event.jaxis.value/((float)SHRT_MAX))*127);
-                    break;
+                } break;
                 case SDL_JOYBUTTONDOWN:
             	{
 	    			//todo custom mappings at run time
 	    			int mapping[10] = { A, B, Y, X, L2, R2, L1, R1, SELECT, START };
-	    			if(event.jbutton.button < 10)
-	    			mem.game_pads[0].buttons |= mapping[event.jbutton.button];
+	    			int mapping_PS4[15] = { B, A, Y, X, 0, START, SELECT, L3, R3, R1,L1,UP,DOWN,LEFT,RIGHT };
+	    			if(event.jbutton.button < 15)
+	    			mem.game_pads[0].buttons |= mapping_PS4[event.jbutton.button];
             	} break;
                 case SDL_JOYBUTTONUP:
                 {
                		int mapping[10] = { A, B, Y, X, L2, R2, L1, R1, SELECT, START };
-               		if(event.jbutton.button < 10)
-               		mem.game_pads[0].buttons &= ~(mapping[event.jbutton.button]);
+               		int mapping_PS4[15] = { B, A, Y, X, 0, START, SELECT, L3, R3, R1,L1,UP,DOWN,LEFT,RIGHT };
+               		if(event.jbutton.button < 15)
+               		mem.game_pads[0].buttons &= ~(mapping_PS4[event.jbutton.button]);
                 } break;
                 case SDL_JOYHATMOTION:
                 {
@@ -196,6 +199,16 @@ void main(int argc, char **argv)
 		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
     	SDL_UpdateWindowSurface(window);
 		prev = cur;
+		static float t;
+		t+=g->delta_time;
+		if(t > 1)
+		{
+			printf("microseconds last frame: %d\n", microseconds); //once a second, print the microseconds the previous frame took to process
+			t=0;
+
+		}
+
+		//Sleep(500);
 // #define clock_rate 100000000
 // #define tick_count 100
 // #define interval 1000000/clock_rate*tick_count

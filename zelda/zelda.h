@@ -44,43 +44,35 @@ typedef struct
 {
 	u32 width, height;
 	Color pixels[0];
+} InlineTexture;
+
+typedef struct
+{
+	u32 width, height;
+	Color *pixels;
 } Texture;
 
-#define sprite_size 16
+#define sprite_size 22
 typedef struct
 {
 	Color pixels[sprite_size*sprite_size];
 } Sprite;
 
-draw_tex_t(Texture *tex, int x, int y)
-{
-	for (int _x = 0; _x < tex->width; ++_x)
-	for (int _y = 0; _y < tex->height; ++_y)
-	{
-		Color col = tex->pixels[_y*tex->width+_x];
-		if(col != white)
-		mem.frame_buffer.pixels[(y+_y)*vm_width+(x+_x)] = col;
-	}
-}
 
-draw_sprite_t(Sprite s, int x, int y)
-{
-	for (int _x = 0; _x < sprite_size; ++_x)
-	for (int _y = 0; _y < sprite_size; ++_y)
-	{
-		Color col = s.pixels[_y*sprite_size+_x];
-		if(col != 0)
-			mem.frame_buffer.pixels[(y+_y)*vm_width+(x+_x)] = col;
-	}
-}
 
 int clamp_int(int val, int min, int max)
 {
 	return (val < min) ? min : ((val > max) ? max : val);
 }
 
+void clamp_float(float *val, int min, int max)
+{
+	*val = (*val < min) ? min : ((*val > max) ? max : *val);
+}
+
 typedef enum
 {
+	Face,
 	SplashScreen,
 	TitleScreen,
 	FileSelect,
@@ -94,10 +86,7 @@ typedef struct
 {
 	int x, y;
 } v2i;
-typedef struct
-{
-	float x, y;
-} v2f;
+
 float v2i_mag(v2i v)
 {
 	return (float)sqrt(v.x * v.x + v.y * v.y);
@@ -110,6 +99,20 @@ v2i v2i_sub(v2i a, v2i b)
 
 float v2i_dist(v2i a, v2i b)
 {    return v2i_mag(v2i_sub(a,b));    }
+
+float v2_mag(v2 v)
+{
+	return (float)sqrt(v.x * v.x + v.y * v.y);
+}
+
+v2 v2_sub(v2 a, v2 b)
+{
+	return (v2){ a.x - b.x, a.y - b.y};
+}
+
+float v2_dist(v2 a, v2 b)
+{    return v2_mag(v2_sub(a,b));    }
+
 
 typedef struct
 {
@@ -214,12 +217,35 @@ v3 to_barycentric(Triangle tri, v2i cartesian)
 	bary.y = p.y*cart.x+q.y*cart.y;
 	bary.z = 1-(bary.x+bary.y);
 
-	return bary;	
-	// float denom = ((tri.b.y-tri.c.y)*(tri.a.x-tri.c.x))+((tri.c.x-tri.b.x)*(tri.a.y-tri.c.y));
-	// float a = ((tri.b.y-tri.c.y)*(cartesian.x-tri.c.x))+((tri.c.x-tri.b.x)*(cartesian.y-tri.c.y))/denom;
-	// float b = ((tri.c.y-tri.a.y)*(cartesian.x-tri.c.x))+((tri.a.x-tri.c.x)*(cartesian.y-tri.c.y))/denom;
-	// float c = 1-a-b;
-	// return (v3){a,b,c};
+	float tol = .000001f;
+	if(bary.x  < 0 && bary.x >= -tol)
+		bary.x = 0;
+	if(bary.y < 0 && bary.y >= -tol)
+		bary.y = 0;
+	if(bary.z < 0 && bary.z >= -tol)
+		bary.z = 0;
+	return bary;
+}
+
+//returns the barycentric coordinate, but assumes you have performed the basic edge functions of the triangle already (so you can do them just once per triangle)
+v3 to_barycentric_quick(v2 origin, v2 p, v2 q, v2 cart)
+{
+	cart.x-=origin.x;
+	cart.y-=origin.y;
+
+	v3 bary;
+	bary.x = p.x*cart.x+q.x*cart.y;
+	bary.y = p.y*cart.x+q.y*cart.y;
+	bary.z = 1-(bary.x+bary.y);
+
+	float tol = .000001f;
+	if(bary.x  < 0 && bary.x >= -tol)
+		bary.x = 0;
+	if(bary.y < 0 && bary.y >= -tol)
+		bary.y = 0;
+	if(bary.z < 0 && bary.z >= -tol)
+		bary.z = 0;
+	return bary;
 }
 
 //returns the screen space cartesian point represented by a barycentric coordinate and the associated triangle
@@ -261,66 +287,6 @@ int max_3(int a, int b, int c)
 	return res;
 }
 
-void fill_triangle(Triangle tri, Color col)
-{
-
-	//bounding box
-	int x_min = min_3(tri.a.x, tri.b.x, tri.c.x);
-	int x_max = max_3(tri.a.x, tri.b.x, tri.c.x);
-	int y_min = min_3(tri.a.y, tri.b.y, tri.c.y);
-	int y_max = max_3(tri.a.y, tri.b.y, tri.c.y);
-	
-	if(x_min < 0)
-		x_min = 0;
-	if(y_min < 0)
-		y_min = 0;
-
-	if(x_max > vm_width-1)
-		x_max = vm_width-1;
-	
-	if(y_max > vm_height-1)
-		y_max = vm_height-1;
-
-	for (int y = y_min; y < y_max; ++y)
-	for (int x = x_min; x < x_max; ++x)
-	{
-		v2i v = (v2i){x,y};
-		v3 bary = to_barycentric(tri,v);
-
-		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
-		{
-			mem.frame_buffer.pixels[y*vm_width+x] = col;
-		}
-	}	
-}
-
-RasterList triangle_to_rasterlist(Triangle tri)
-{
-	//todo bounding box
-	RasterList list = {.entry_count = 0};
-	for (int y = 0; y < vm_height; ++y)
-	for (int x = 0; x < vm_width; ++x)
-	{
-		v2i v = (v2i){x,y};
-		v3 bary = to_barycentric(tri,v);
-
-		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
-		{
-			list.entries[list.entry_count++] = (RasterEntry){.pixel_index = y*vm_width+x, .bary = bary};
-		}
-	}
-
-	return list;
-}
-
-fill_rasterlist(RasterList list, Color col)
-{
-	for (int i = 0; i < list.entry_count; ++i)
-	{
-		mem.frame_buffer.pixels[list.entries[i].pixel_index] = col;
-	}
-}
-
 typedef enum
 {
 	None,
@@ -355,9 +321,11 @@ typedef struct Entity
 	struct Entity* parent;
 	Transform transform;
 	int health;
-	bool skip_draw;
+	bool do_draw_rect;
 	bool solid;
 	Color color;
+	bool draw_sprite;
+	Sprite *sprite;
 	PickupType pickup_type;
 	int var;
 } Entity;
@@ -394,27 +362,221 @@ typedef struct
 	//assets
 	Sprite heart;
 	Sprite hearts[4];
+	Sprite rupee;
 	float delta_time;
+	float time;
 	GamePad previous_padstate;
 	PlayerAnimationState player_animation_state;
 	float anim_timer;
 	Command *current_command;
+	byte z_buffer[vm_width*vm_height];
+	Texture global_texture;
+	bool draw_hud;
+	bool draw_camera_gizmo;
+	bool render_scene;
+	Color background_pixels[vm_width*vm_height];
+	Color hud_pixels[vm_width*100];
 } GameStatus;
 
 
 GameStatus *g = (GameStatus *)&mem.RAM[start_address];
 
+void delete_entity(int i)
+{
+	g->entities[i] = g->entities[--g->entity_count];
+}
+#define cur_tex (g->global_texture)
+#define cur_pix (cur_tex.pixels)
 fill_rect(Color color, Rect rect)
 {
-	int x_min = clamp_int(rect.x, 0, vm_width);
-	int x_max = clamp_int(rect.x+rect.width, 0, vm_width);
-	int y_min = clamp_int(rect.y, 0, vm_height);
-	int y_max = clamp_int(rect.y+rect.height, 0, vm_height);
+	int x_min = clamp_int(rect.x, 0, cur_tex.width);
+	int x_max = clamp_int(rect.x+rect.width, 0, cur_tex.width);
+	int y_min = clamp_int(rect.y, 0, cur_tex.height);
+	int y_max = clamp_int(rect.y+rect.height, 0, cur_tex.height);
 
 	for (int _x = x_min; _x < x_max; ++_x)
 	for (int _y = y_min; _y < y_max; ++_y)
 	{
-		mem.frame_buffer.pixels[_y*vm_width+_x] = color;
+		cur_pix[_y*cur_tex.width+_x] = color;
+	}
+}
+
+void fill_circle(Color color, v2i center, float radius)
+{
+	int x_min = (int)(center.x-radius);
+	if(x_min < 0)
+		x_min = 0;
+	int x_max = (int)(center.x+radius);
+	if(x_max > cur_tex.width)
+		x_max = cur_tex.width;
+	int y_min = (int)(center.y-radius);
+	if(y_min < 0)
+		y_min = 0;
+	int y_max = (int)(center.y+radius);
+	if(y_max > cur_tex.height)
+		y_max = cur_tex.height;
+
+	for (int x = x_min; x <= x_max; ++x)
+	for (int y = y_min; y <= y_max; ++y)	
+	{
+		float dist_from_center = v2i_dist((v2i){x,y}, center);
+		if(dist_from_center <= radius)
+		{
+			cur_pix[y*cur_tex.width+x] = color;
+		}
+	}
+}
+
+Color lerp_color(Color a, Color b, float t);
+void fill_circle2(Color color, v2 center, float radius, float factor)
+{
+	float padding = 9;
+	float pad_rad = radius+padding;
+	int x_min = (int)(center.x-(pad_rad));
+	if(x_min < 0)
+		x_min = 0;
+	int x_max = (int)(center.x+pad_rad);
+	if(x_max > cur_tex.width)
+		x_max = cur_tex.width;
+	int y_min = (int)(center.y-pad_rad);
+	if(y_min < 0)
+		y_min = 0;
+	int y_max = (int)(center.y+pad_rad);
+	if(y_max > cur_tex.height)
+		y_max = cur_tex.height;
+
+	for (int x = x_min; x <= x_max; ++x)
+	for (int y = y_min; y <= y_max; ++y)	
+	{
+		float dist_from_center = v2_dist((v2){x,y}, center);
+		if(dist_from_center <= radius)
+		{
+			cur_pix[y*cur_tex.width+x] = color;
+		}
+		else
+		{
+			float t = (dist_from_center-radius)/factor;
+			clamp_float(&t,0,1);
+			cur_pix[y*cur_tex.width+x] = lerp_color(color, cur_pix[y*cur_tex.width+x], t);
+		}
+	}
+}
+
+draw_tex(Texture tex, int x, int y)
+{
+	for (int _x = 0; _x < tex.width; ++_x)
+	for (int _y = 0; _y < tex.height; ++_y)
+	{
+		Color col = tex.pixels[_y*tex.width+_x];
+		cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+	}
+}
+
+draw_tex_t(Texture tex, int x, int y)
+{
+	for (int _x = 0; _x < tex.width; ++_x)
+	for (int _y = 0; _y < tex.height; ++_y)
+	{
+		Color col = tex.pixels[_y*tex.width+_x];
+		if(col != 0)
+		cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+	}
+}
+
+draw_sprite_t(Sprite s, int x, int y)
+{
+	for (int _x = 0; _x < sprite_size; ++_x)
+	for (int _y = 0; _y < sprite_size; ++_y)
+	{
+		Color col = s.pixels[_y*sprite_size+_x];
+		if(col != 0)
+			cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+	}
+}
+
+void fill_triangle(Triangle tri, Color col)
+{
+	//bounding box
+	int x_min = min_3(tri.a.x, tri.b.x, tri.c.x);
+	int x_max = max_3(tri.a.x, tri.b.x, tri.c.x);
+	int y_min = min_3(tri.a.y, tri.b.y, tri.c.y);
+	int y_max = max_3(tri.a.y, tri.b.y, tri.c.y);
+	
+	x_min = clamp_int(x_min, 0, cur_tex.width-1);
+	x_max = clamp_int(x_max, 0, cur_tex.width-1);
+	y_min = clamp_int(y_min, 0, cur_tex.height-1);
+	y_max = clamp_int(y_max, 0, cur_tex.height-1);
+
+	v3 edge1 = v3_sub(tri.a,tri.c);
+	v3 edge2 = v3_sub(tri.b,tri.c);
+	v3 p = edge1;
+	v3 q = edge2;
+	float det = p.x*q.y-p.y*q.x;
+	p.x=edge2.y;
+	q.y=edge1.x;
+	p.y=-p.y;
+	q.x=-q.x;
+	p = v3_div(p,det);
+	q = v3_div(q,det);
+
+	for (int y = y_min; y <= y_max; ++y)
+	for (int x = x_min; x <= x_max; ++x)
+	{
+		//v3 bary = to_barycentric(tri,(v2i){x,y});
+		v3 bary = to_barycentric_quick((v2){tri.c.x,tri.c.y},(v2){p.x,p.y},(v2){q.x,q.y},(v2){x,y});
+
+		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
+		{
+			cur_pix[y*cur_tex.width+x] = col;
+		}
+	}	
+}
+
+RasterList triangle_to_rasterlist(Triangle tri)
+{
+	//todo bounding box
+	RasterList list = {.entry_count = 0};
+	for (int y = 0; y < vm_height; ++y)
+	for (int x = 0; x < vm_width; ++x)
+	{
+		v2i v = (v2i){x,y};
+		v3 bary = to_barycentric(tri,v);
+
+		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
+		{
+			list.entries[list.entry_count++] = (RasterEntry){.pixel_index = y*vm_width+x, .bary = bary};
+		}
+	}
+
+	return list;
+}
+
+fill_rasterlist(RasterList list, Color col)
+{
+	for (int i = 0; i < list.entry_count; ++i)
+	{
+		mem.frame_buffer.pixels[list.entries[i].pixel_index] = col;
+	}
+}
+
+void outline(Color fill_color, Color detect_color)
+{
+	for (int y = 0; y < cur_tex.height; ++y)
+	for (int x = 0; x < cur_tex.width; ++x)
+	{
+		int i = y*cur_tex.width+x;
+		bool neighbor_test = false;
+		if(x > 0)
+			neighbor_test |= cur_pix[i-1] == detect_color;
+		if(x < cur_tex.width-1)
+			neighbor_test |= cur_pix[i+1] == detect_color;
+		if(y > 0)
+			neighbor_test |= cur_pix[i-cur_tex.width] == detect_color;
+		if(y < cur_tex.height-1)
+			neighbor_test |= cur_pix[i+cur_tex.width] == detect_color;
+
+		if(cur_pix[i] == 0 && neighbor_test)
+			cur_pix[i] = fill_color;
 	}
 }
 
@@ -462,6 +624,11 @@ print_cube(Cube c)
 	printf(" }\n");	
 }
 
+print_v3(char* name, v3 v)
+{
+	printf("%s: { %f, %f, %f }\n", name, v.x, v.y, v.z);
+}
+
 Entity block(Transform t)
 {
 	return 
@@ -469,6 +636,7 @@ Entity block(Transform t)
 	{
 		.entity_type = Block,
 		.transform = t,
+		.do_draw_rect = true,
 		.color = 0xAAAAAA,
 		.solid = true,
 	};
@@ -478,6 +646,73 @@ Entity block(Transform t)
 #define default_transform {0,0,0,0,0,0,1,1,1}
 void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
 void draw_terrain();
+
+#define screen_texture ((Texture) { vm_width, vm_height, mem.frame_buffer.pixels })
+#define heart_texture ((Texture){sprite_size,sprite_size, g->heart.pixels})
+void regenerate_heart_sprites()
+{
+	cur_tex = heart_texture;
+
+	for (int o = 0; o < 3; ++o)
+	for (int i = 0; i < sprite_size*sprite_size; ++i)
+	{
+		g->heart.pixels[i] = 0;
+		g->hearts[0].pixels[i] = 0;
+		g->hearts[1].pixels[i] = 0;
+		g->hearts[2].pixels[i] = 0;
+		g->hearts[3].pixels[i] = 0;
+		//next_sprite();
+	}
+	cur_tex = heart_texture;
+	int x_offset = 3;
+	int y_offset = 3;
+	Triangle tri = (Triangle)
+	{
+		.a = {x_offset+1, y_offset+7,0},
+		.b = {x_offset+8, y_offset+14,0},
+		.c = {x_offset+15,y_offset+7,0},
+	};
+	fill_triangle(tri,red);
+	fill_rect(red,(Rect){x_offset+4,y_offset+5,8,4});
+	float pulse_radius = (sin(g->time*6)+1)*.55f;
+	fill_circle(red,(v2i){x_offset+4,y_offset+4}, 4+pulse_radius);
+	fill_circle(red,(v2i){x_offset+12,y_offset+4}, 4+pulse_radius);
+	outline(0xFF880000, red);
+	outline(black, 0xFF880000);
+	fill_circle(0xFFFF4444,(v2i){x_offset+4,y_offset+4}, 3.5f);
+	fill_circle(0xFFFF8888,(v2i){x_offset+4,y_offset+4}, 2);
+
+	#define next_sprite() cur_pix += sizeof(Sprite)/sizeof(Color)
+	//outline(cur_tex,0xFD000000, 0xFE000000);
+	g->cur_health=19;
+	next_sprite();
+	draw_sprite_t(g->heart,0,0);
+	next_sprite();
+	draw_sprite_t(g->heart,0,0);
+	next_sprite();
+	draw_sprite_t(g->heart,0,0);
+	next_sprite();
+	draw_sprite_t(g->heart,0,0);
+
+	for (int y = 0; y < sprite_size; ++y)
+	for (int x = 0; x < sprite_size; ++x)
+	{
+		int i = y*sprite_size+x;
+		if((g->hearts[0].pixels[i] & red) == red)
+			g->hearts[0].pixels[i] = white;
+
+		if((g->hearts[1].pixels[i] & red) == red && (x > x_offset+16/2 || y > y_offset+16/2))
+			g->hearts[1].pixels[i] = white;
+
+		if((g->hearts[2].pixels[i] & red) == red && x > x_offset+16/2)
+			g->hearts[2].pixels[i] = white;
+
+		if(((g->hearts[3].pixels[i] & red) == red) && (x > x_offset+16/2 && y < y_offset+16/2))
+			g->hearts[3].pixels[i] = white;
+	}
+
+	cur_tex = screen_texture;
+}
 
 init()
 {
@@ -493,18 +728,20 @@ init()
 		{
 			{
 				.entity_type = Player,
-				.transform = default_transform,
+				.transform = (Transform){1,0,1,0,0,0,1,1,1},
+				.do_draw_rect = true,
 				.color = green,
 			},
 			block((Transform){-3,0,1,0,0,0,1,1,1}),
-			block((Transform){-2,0,2,0,0,0,1,1,1}),
-			block((Transform){-1,0,3,0,0,0,1,1,1}),
-			block((Transform){-0,0,4,0,0,0,1,1,1}),
-			block((Transform){-1,0,5,0,0,0,1,1,1}),
-			block((Transform){-2,0,6,0,0,0,1,1,1}),
+			block((Transform){5,0,0,0,0,0,10,1,1}),
+			block((Transform){0,0,5,0,0,0,1,1,10}),
+			block((Transform){-0,3,4,0,0,0,1,1,1}),
+			block((Transform){-1,4,5,0,0,0,1,1,1}),
+			block((Transform){-2,5,6,0,0,0,1,1,1}),
 			{
 				.entity_type = Enemy,
-				.transform = (Transform){4,0,0,0,0,0,1,1,1},
+				.transform = (Transform){ {4,0,-1},.scale = {1,1,1}},
+				.do_draw_rect = true,
 				.color = red,
 				.solid = true,
 			},
@@ -512,39 +749,59 @@ init()
 				.entity_type = Pickup,
 				.pickup_type = Heart,
 				.transform = (Transform){4,0,-2,0,0,0,.5f,.5f,.5f},
+				.do_draw_rect = true,
 				.color = red,
-				.solid = false,
 			},
 			{
 				.entity_type = Pickup,
 				.pickup_type = HeartContainer,
 				.transform = (Transform){4,0,-3,0,0,0,1,1,1},
+				.do_draw_rect = true,
 				.color = red,
-				.solid = false,
 			},
 			{
 				.entity_type = Pickup,
 				.pickup_type = Rupee,
 				.transform = (Transform){-2,0,-3,0,0,0,.5f,.5f,1},
-				.color = green,
-				.solid = false,
+				.draw_sprite = true,
+				.sprite = &g->rupee,
 				.var = 1,
 			},											
 		},
+		.global_texture = screen_texture,
+		.draw_hud = true,
+		.render_scene = true,
+		.draw_camera_gizmo = true,
+		.camera = (Transform){0,0,-1,0,0,0,.2,.2,.2},
 	};
 
+	#define rupee_texture ((Texture){sprite_size,sprite_size, g->rupee.pixels})
 
-	g->camera = (Transform){0,0,-1,0,0,0,.2,.2,.2};
-	for (int i = 0; i < sprite_size*sprite_size; ++i)
+	cur_tex = rupee_texture;
+	Triangle tri = (Triangle)
 	{
-		g->heart.pixels[i] = red;
-		g->hearts[0].pixels[i] = white;
-		g->hearts[1].pixels[i] = 0xFFAAAA;
-		g->hearts[2].pixels[i] = 0xFF8888;
-		g->hearts[3].pixels[i] = 0xFF5555;
-	}
+		.a = {16/2,0,0},
+		.b = {4,4,0},
+		.c = {16-4,4,0},
+	};
 
-	generate_terrain(25,25,1,1);
+	fill_triangle(tri,green);
+	fill_rect(green,(Rect){4,4,9,8});
+	tri = (Triangle)
+	{
+		.a = {16/2,16-1,0},
+		.b = {16-4,16-4,0},
+		.c = {4,16-4,0},
+	};
+	fill_triangle(tri,green);
+
+
+	regenerate_heart_sprites();
+
+	cur_tex = screen_texture;
+
+
+	generate_terrain(16,16,16,16);
 }
 
 memset_u32_4wide(u32 *p, int value, int count)
@@ -611,7 +868,7 @@ gradient(Color a, Color b, int h)
 	{
 		float t = y/(float)h;
 		col = lerp_color(a, b, t);
-		memset_u32_4wide(&mem.frame_buffer.pixels[y*vm_width], col, vm_width);
+		memset_u32_4wide(&cur_pix[y*cur_tex.width], col, cur_tex.width);
 	}
 }
 
@@ -625,32 +882,7 @@ mountains()
 	fill_rect(brown,(Rect){0,100,vm_width,vm_height-100});
 }
 
-fill_circle(Color color, v2i center, float radius)
-{
 
-	int x_min = (int)(center.x-radius);
-	if(x_min < 0)
-		x_min = 0;
-	int x_max = (int)(center.x+radius);
-	if(x_max > vm_width)
-		x_max = vm_width;
-	int y_min = (int)(center.y-radius);
-	if(y_min < 0)
-		y_min = 0;
-	int y_max = (int)(center.y+radius);
-	if(y_max > vm_height)
-		y_max = vm_height;
-	//todo bounding box
-	for (int x = x_min; x < x_max; ++x)
-	for (int y = y_min; y < y_max; ++y)	
-	{
-		float dist_from_center = v2i_dist((v2i){x,y}, center);
-		if(dist_from_center <= radius)
-		{
-			mem.frame_buffer.pixels[y*vm_width+x] = color;
-		}
-	}
-}
 
 bool line_circle_intersect(v3 start, v3 end, v3 center, float radius)
 {
@@ -672,7 +904,8 @@ bool line_circle_intersect(v3 start, v3 end, v3 center, float radius)
 
 sun()
 {
-	fill_circle(yellow, (v2i){64,64}, 32.3f);
+	int div= 12;
+	fill_circle2(yellow, (v2){(vm_width/2+cos(3.14159f+g->time/div)*((vm_width-40)/2)),120-sin(g->time/div)*100}, 19.9f, 8);
 }
 
 
@@ -708,7 +941,10 @@ field()
 	v3 hand;
 	v3 sword_tip;
 	static v3 player_forward = v3_forward;
-	if(false)
+
+	generate_terrain(16,16,16,16);
+	regenerate_heart_sprites();
+	cur_tex=screen_texture;
 	//update
 	{
 		if(ButtonDown(START) && !button_down(g->previous_padstate,START))
@@ -733,6 +969,10 @@ field()
 			else if(ButtonDown(RIGHT))
 				move_vector.x = 1;
 
+			char deadzone = 20;
+			if(abs(mem.game_pads[0].sticks.left_stick.X) > deadzone || abs(mem.game_pads[0].sticks.left_stick.Y) > deadzone)
+				move_vector = (v3){mem.game_pads[0].sticks.left_stick.X/128.0f, 0, mem.game_pads[0].sticks.left_stick.Y/128.0f};
+
 			if(v3_mag(move_vector) > 1)
 			{
 				move_vector = v3_normalized(move_vector);
@@ -745,8 +985,8 @@ field()
 			right = (v3){forward.z, 0, -forward.x};
 
 			//temporarily align with axes while in 2D as a bodge, delete these 2 lines when returning to 3d 
-			//forward = (v3){0,0,1};
-			//right = (v3){1,0,0};
+			forward = (v3){0,0,1};
+			right = (v3){1,0,0};
 
 			//transform move_vector to be camera relative
 			v3 forward2 = v3_scale(forward,move_vector.z);
@@ -756,9 +996,9 @@ field()
 			//for now
 			if(v3_mag(move_vector) > 0) player_forward = move_vector;
 
-			//todo actually base delta time on clock
 			move_vector = v3_scale(move_vector, speed);
 			move_vector = v3_scale(move_vector, g->delta_time);
+
 
 			//apply motion and handle collision
 			{
@@ -840,22 +1080,30 @@ field()
 							case Rupee:
 							{
 								g->cur_rupees+=g->entities[i].var;
+								delete_entity(i);
+								continue;
 							} break;
 							case Fairy:
 							{
 								g->cur_health = g->max_health;
+								delete_entity(i);
+								continue;
 							} break;
 							case HeartContainer:
 							{
 								g->max_health += 4;
 								if(g->max_health > 80)
 									g->max_health = 80;
+								delete_entity(i);
+								continue;
 							} break;
 							case Heart:
 							{
-								g->cur_health += 4;
+								g->cur_health ++;
 								if(g->cur_health > g->max_health)
 									g->cur_health = g->max_health;
+								delete_entity(i);
+								continue;
 							} break;
 						}
 					}
@@ -892,26 +1140,41 @@ field()
 	//render
 	{
 		//scene
-		if(false)
+		if(g->render_scene)
 		{
 			//environment
 			{
-				sky();
-				mountains();
-				sun();
+				static bool first = true;
+				#define background_texture ((Texture){.pixels = g->background_pixels,.width = vm_width,.height = vm_height})
+				//if(first)
+				{
+					first=false;
+					cur_tex = background_texture;
+					sky();
+					sun();
+					mountains();
+					draw_terrain();
+					cur_tex = screen_texture;
+				}
+				draw_tex(background_texture,0,0);
 			}
 
 			for (int i = 0; i < g->entity_count; ++i)
 			{
-				if(!g->entities[i].skip_draw)
+				if(g->entities[i].do_draw_rect)
 				{
 					render_rect(g->entities[i].color, g->entities[i].transform);
 				}
+				if(g->entities[i].draw_sprite)
+					draw_sprite_t(*(g->entities[i].sprite),(vm_width-unit_size)/2+g->entities[i].transform.position.x*unit_size,(vm_height-unit_size)/2-g->entities[i].transform.position.z*unit_size);
 			}
 
-			render_rect(green, g->camera);
-			render_rect(blue, t_from_v_and_s(forward,.2f));
-			render_rect(red, t_from_v_and_s(right,.2f));
+			if(g->draw_camera_gizmo)
+			{
+				render_rect(green, g->camera);
+				render_rect(blue, t_from_v_and_s(forward,.2f));
+				render_rect(red, t_from_v_and_s(right,.2f));
+			}
 
 			if(g->player_animation_state == Slashing)
 			{
@@ -919,143 +1182,120 @@ field()
 				render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
 			}
 		}
+
 		//HUD
-		if(false)
+		if(g->draw_hud)
 		{
-			//todo create heart sprites to replace these squares with
-			//health bar
+			#define hud_texture ((Texture){vm_width,vm_height,g->hud_pixels})
+			static int prev_health = -1;
+			if(true)//(prev_health != g->cur_health)
 			{
-				int full_hearts = g->cur_health / 4; 
-				int total_hearts = g->max_health / 4;
-				int partial =  g->cur_health % 4;
-
-				int heart_width = 16;
-				int x_offset = 6;
-				int y_offset = 6;
-				int x_padding = 2;
-				int y_padding = 2;
-				int hearts_per_row = 10;
-
-				int i;
-				for (i = 0; i < full_hearts; ++i)
+				cur_tex = hud_texture;
+				for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
 				{
-					draw_sprite_t(g->heart, x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
+					cur_pix[i]=0;
 				}
-
-				if(partial){
-					draw_sprite_t(g->hearts[partial], x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
-					i++;
-				}
-				for (; i < total_hearts; ++i)
+				//health bar
 				{
-					draw_sprite_t(g->hearts[0], x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
+					int full_hearts = g->cur_health / 4; 
+					int total_hearts = g->max_health / 4;
+					int partial =  g->cur_health % 4;
+
+					int heart_width = sprite_size;
+					int x_offset = 6;
+					int y_offset = 6;
+					static int x_padding = 0;
+					int y_padding = -3;
+					int hearts_per_row = 10;
+
+					int i;
+					for (i = 0; i < full_hearts; ++i)
+					{
+						draw_sprite_t(g->heart, x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
+					}
+
+					if(partial){
+						draw_sprite_t(g->hearts[partial], x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
+						i++;
+					}
+					for (; i < total_hearts; ++i)
+					{
+						draw_sprite_t(g->hearts[0], x_offset+(i%hearts_per_row)*(heart_width+x_padding),y_offset+(i/hearts_per_row)*(heart_width+y_padding));
+					}
 				}
-			}
 
-			//magic bar
-			{
-				int bar_width = 100;
-				int bar_height = 10;
-				int border_size = 2;
-				int x = 8;
-				int y = 48;
-				fill_rect(black, (Rect){x-border_size, y-border_size, bar_width+(2*border_size), bar_height+(2*border_size)});
-				fill_rect(red, (Rect){x, y, bar_width, bar_height});
-				fill_rect(green, (Rect){x, y, (int)((g->cur_magic/(float)g->max_magic)*bar_width), bar_height});
-			}
-
-			//wallet
-			{
-				//todo grab fontset file from platfighter project for text drawing
-			}
-
-			//command buttons
-			{
-				fill_circle(blue, (v2i){vm_width/2+32,48}, 32);
-
-				//todo render
+				//magic bar
 				{
-					if(g->current_command != NULL)
-					printf(g->current_command->text);
+					int bar_width = 150;
+					int bar_height = 12;
+					int border_size = 2;
+					int x = 8;
+					int y = 52;
+					fill_rect(0xFF151515, (Rect){x-3, y-3, bar_width+(2*3), bar_height+(2*3)});
+					fill_rect(0xFF444444, (Rect){x-border_size, y-border_size, bar_width+(2*border_size), bar_height+(2*border_size)});
+					fill_rect(0xFF222222, (Rect){x-1, y-1, bar_width+(2), bar_height+(2)});
+					fill_rect(red, (Rect){x, y, bar_width, bar_height});
+					//fill_rect(green, (Rect){x, y, (int)((g->cur_magic/(float)g->max_magic)*bar_width), bar_height});
+					for (int _y = y; _y < y+bar_height; ++_y)
+					for (int _x = x; _x < x+(int)((g->cur_magic/(float)g->max_magic)*bar_width); ++_x)
+					{
+						cur_pix[_y*cur_tex.width+_x] = (int)(255-((sin(_x/12.5f)+1)*64))<<8;
+					}			
 				}
+
+				//wallet
+				{
+					//todo grab fontset file from platfighter project for text drawing
+				}
+
+				//command buttons
+				{
+					Color col = black;
+					float rad = 33;
+					float t = 0;
+					int count = 12;
+					for (int i = 0; i <= count; ++i)
+					{
+						rad-=.1f;
+						t = i/(float)count;
+						col = (Color)(0xFF*t);
+						
+						fill_circle(col, (v2i){vm_width/2+32,48}, rad);
+					}
+
+
+					//todo render
+					{
+						if(g->current_command != NULL)
+						printf(g->current_command->text);
+					}
+				}
+
+				//item buttons
+				{
+					Color col = black;
+					float rad = 17;
+					float t = 0;
+					int count = 12;
+					for (int i = 0; i <= count; ++i)
+					{
+						rad-=.1f;
+						t = i/(float)count;
+						unsigned char r = (unsigned char)(0xFF*t);
+						unsigned char g = (unsigned char)(0xFF*t);
+						col=(r << 16) | (g<<8);
+						fill_circle(col,(v2i){vm_width-(32+32+32+32),32}, rad);
+						fill_circle(col,(v2i){vm_width-(32+32+32), 64}, rad);
+						fill_circle(col,(v2i){vm_width-(32+32),32}, rad);
+					}
+				}
+				
+				cur_tex = screen_texture;
 			}
 
-			//item buttons
-			{
-				fill_circle(yellow,(v2i){vm_width-(32+32+32+32),32}, 16);
-				fill_circle(yellow,(v2i){vm_width-(32+32+32), 64}, 16);
-				fill_circle(yellow,(v2i){vm_width-(32+32),32}, 16);
-			}
+			draw_tex_t(hud_texture,0,0);
+			prev_health = g->cur_health;
 		}
-
-		//triangle r&d
-		if(true)
-		{
-
-			for (int i = 0; i < vm_width*vm_height; ++i)
-			{
-				mem.frame_buffer.pixels[i] = 0;
-			}
-
-			Triangle tri = (Triangle)
-			{
-				.a = {120,50,0},
-				.b = {100,75,0},
-				.c = {130,100,0},
-			};
-
-			for (int i = 0; i < 1000; ++i)
-			{
-				v2i center = (v2i){rand()%(vm_width-1),rand()%(vm_height-1)};
-
-				Triangle tri = (Triangle)
-				{
-					.a = {center.x+rand()%(20),center.y+rand()%(20)},
-					.b = {center.x+rand()%(20),center.y+rand()%(20)},
-					.c = {center.x+rand()%(20),center.y+rand()%(20)},
-				};
-
-				fill_triangle(tri, ((rand()%255) << 16)|((rand()%255) << 8)|(rand()%255));
-			}
-			//fill_triangle(tri, white);
-			static RasterList list = {.entry_count = 0};
-			static bool first = true;
-			if(first)
-			{
-				first = false;
-				list = triangle_to_rasterlist(tri);
-			}
-			//fill_rasterlist(list, white);
-			static v2f cart = (v2f){80, 125};
-			fill_rect( blue, (Rect){cart.x-2,cart.y-2,4,4});
-
-			cart.x+=.5f;
-		}
-
-		//matrix visualizer
-		if(false)
-		{
-			fill_rect(black,(Rect){0,0,vm_width,vm_height});
-			v2i origin = (v2i){100, 200};
-			int view_scale = 20;
-
-			static v2f p = { 2, -2 };
-			static v2f q = { 2, 2 };
-
-			v2f v = { .5f, 2 };
-			v2f v_prime = (v2f){v.x*p.x+v.y*q.x, v.x*p.y+v.y*q.y};
-			printf("v_prime: { %f, %f }\n",v_prime.x,v_prime.y);
-			fill_rect(white,(Rect){origin.x, origin.y, 10, 10});
-			fill_rect(red,(Rect){origin.x+(int)(view_scale*p.x), origin.y-(int)(view_scale*p.y), 10, 10});
-			fill_rect(green,(Rect){origin.x+(int)(view_scale*q.x), origin.y-(int)(view_scale*q.y), 10, 10});
-			fill_rect(magenta, (Rect){origin.x+(int)(view_scale*v_prime.x), origin.y-(int)(view_scale*v_prime.y), 10, 10});
-			q.x+=.001f;
-			q.y-=.01f;
-			p.y-=.001f;
-		}
-
-		if(false)
-		draw_terrain();
 	}
 }
 
@@ -1068,15 +1308,50 @@ paused()
 {
 	fill_rect(red,(Rect){10,10,vm_width-20,vm_height-20});
 	if(ButtonDown(START) && !button_down(g->previous_padstate,START)){
-		printf("foo!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 		g->current_gamestate = g->previous_gamestate;
 		g->previous_gamestate = 0;
 	}
 
 }
 
+eye(v2 eye_pos)
+{
+	fill_circle2(0xFF555555, eye_pos, 15.5f, .8f);	
+	fill_circle2(white, eye_pos, 12, 4);	
+	fill_circle2(0xFF000044, eye_pos, 7.5f, 1);
+	fill_circle2(blue, eye_pos, 6,1);
+	fill_circle2(black, eye_pos, 3,1.5f);
+	fill_circle2(white, (v2){eye_pos.x-3,eye_pos.y-2}, 1.5f, 1.6f);
+}
+
+face()
+{
+	v2 eye_pos = {82,40};
+	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
+	{
+		cur_pix[i] = 0;
+	}
+	
+	fill_circle2(0xFFFFCCAA,(v2){100,41}, 38.5f, 2);
+	
+	fill_circle2(0xFFFFCCAA,(v2){100,65}, 19.9f, 2);
+	fill_circle(0xFFFFAA88, (v2i){100,60}, 12.9f);
+
+	eye(eye_pos);
+	eye_pos.x+=37;
+	eye(eye_pos);
+
+	fill_rect(0xFFFFCCAA,(Rect){67,24,67,11});
+	fill_rect(0xFFFFCCAA,(Rect){68,50,65,10});
+	fill_rect(black,(Rect){66,28,19,6});
+	fill_rect(black,(Rect){65,30,30,5});
+	fill_rect(black,(Rect){65+42+10,28,19,6});
+	fill_rect(black,(Rect){65+42,31,30,4});
+}
+
 void (*scenes[scene_count])(void) = 
 {
+	[Face] = &face,
 	[SplashScreen] = &splash_screen,
 	[TitleScreen] = &title_screen,
 	[FileSelect] = &file_select,
@@ -1087,15 +1362,17 @@ void (*scenes[scene_count])(void) =
 
 void _tick()
 {
-	//print_gamepad(0);
 	(scenes[g->current_gamestate])();
 	g->previous_padstate = mem.game_pads[0];
+	g->time+= g->delta_time;
 }
 
 int vertex_count = 0;
-v3 vertices[2000];
+v3 vertices[20000];
 int index_count;
-int indices[10000];
+int indices[100000];
+int triangle_count = 0;
+Triangle triangles[100000];
 void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z)
 {
 	int verts_wide = subdivs_x+1;
@@ -1103,10 +1380,26 @@ void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 	vertex_count = (verts_wide)*(verts_deep);
 	index_count = 6*subdivs_x*subdivs_z;
 
+	v2i floop = {(int)(sin(g->time)*10),6};
+	float rad = g->time;
+
+	float height = (cos(g->time/10)+1)*100;
 	for (int z = 0; z < verts_deep; ++z)
 	for (int x = 0; x < verts_wide; ++x)
 	{
-		vertices[z*verts_wide+x] = (v3){x/(float)verts_wide*scale_x,0,z/(float)verts_deep*scale_z};
+		float sc_x = (x/(float)subdivs_x)*scale_x;
+		float sc_z = (z/(float)subdivs_z)*scale_z;
+		float first_octave = 0;
+		float off =.2f;
+		float second_octave = 0;
+		float dist = v2i_dist((v2i){x,z}, floop);
+		if(dist < rad){
+			if(dist > 0)
+				first_octave += height/dist;
+			else
+				first_octave+=height;
+		}
+		vertices[z*verts_wide+x] = (v3){sc_x,first_octave+second_octave, sc_z};
 	}
 
 	int origin = 0;
@@ -1124,21 +1417,89 @@ void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 
 		origin++;
 	}
+
+	triangle_count = index_count/3;
+
+	for (int i = 0; i < index_count; i+=3)
+	{
+		v3 a = vertices[indices[i+0]];
+		v3 b = vertices[indices[i+1]];
+		v3 c = vertices[indices[i+2]];
+
+		triangles[i/3] = (Triangle)
+		{
+			{a.x,a.y,a.z},
+			{b.x,b.y,b.z},
+			{c.x,c.y,c.z},
+		};
+	}
 }
 
+Triangle render_tris[10000];
 void draw_terrain()
 {
-	for (int i = 0; i < index_count; i++)
+	v3 foo = (v3){player.transform.position.x,player.transform.position.z, 0};
+	int column = floor(player.transform.position.x);
+	int row = floor(player.transform.position.z);
+
+	int index = -1;
+	if(!(row < 0 || column < 0))
 	{
-		v3 vertex = vertices[indices[i]];
-		fill_rect(white, (Rect){(int)(vertex.x*10.1f),(int)(vertex.z*10.1f),2,2});
+		float foo_x = foo.x-(int)foo.x;//fractional part
+		float foo_y = foo.y-(int)foo.y;//fractional part
+		index = (row*32+column*2)*1;
+		if(foo_x+foo_y > 1)
+			index++;
+	}
+
+	if(index >= 0)
+	//move player
+	{
+		Triangle tri = triangles[index];
+		tri = (Triangle)
+		{
+			{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
+			{vm_width/2+tri.c.x*unit_size,vm_height/2-tri.c.z*unit_size, tri.c.y},
+			{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
+		};
+
+		v2i foo = (v2i)
+		{
+			vm_width/2+player.transform.position.x*unit_size,
+			vm_height/2-player.transform.position.z*unit_size
+		};
+
+		v3 bary = to_barycentric(tri,foo);
+
+
+		float y = bary.x*tri.a.z+bary.y*tri.c.z+bary.z*tri.b.z;
+		player.transform.position.y = y;
+	}
+
+	for (int i = 0; i < triangle_count; ++i)
+	{
+		Triangle tri = triangles[i];
+		render_tris[i] = (Triangle)
+		{
+			{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
+			{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
+			{vm_width/2+tri.c.x*unit_size,vm_height/2-tri.c.z*unit_size, tri.c.y},
+		};
+	}
+
+	for (int i = 0; i < triangle_count; ++i)
+	{
+		Triangle tri = triangles[i];
+		bool player_above = (index == i);
+		Color col = (player_above) ? red : ((int)((tri.a.y+tri.b.y+tri.c.y)/3) << 8);
+		fill_triangle(render_tris[i], col);
 	}
 }
 
 //notes
 /*
 things to implement:
-push blocks, torches,
+push blocks, torches, chests
 doors, locked doors, shop, signs, octorocks, shield, jumping over gaps, climbing up ledges
 you will need triangle rendering, meshes, particles, skeletal animation, 
 7/3/2023

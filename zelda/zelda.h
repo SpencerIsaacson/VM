@@ -72,11 +72,12 @@ void clamp_float(float *val, int min, int max)
 
 typedef enum
 {
+	Field,
+	MeshTest,
 	Face,
 	SplashScreen,
 	TitleScreen,
 	FileSelect,
-	Field,
 	Dungeon,
 	Paused,
 	scene_count,
@@ -190,10 +191,33 @@ float v3_dot(v3 a, v3 b)
 float v3_project(v3 a, v3 b)
 {    return v3_dot(a,b)/v3_mag(b); }
 
+v3 v3_rotate_yz_plane(v3 v, float t)
+{
+	return (v3){v.x,(sin(t)*v.z)+(cos(t)*v.y), (cos(t)*v.z)-(sin(t)*v.y)};
+}
+
 v3 v3_rotate_xz_plane(v3 v, float t)
 {
 	return (v3){cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z};
 }
+
+
+v3 v3_rotate_xy_plane(v3 v, float t)
+{
+	return (v3){-((-cos(t))*v.x-sin(t)*v.y), ((-sin(t))*v.x+cos(t)*v.y), v.z};
+}
+
+typedef struct
+{
+	int vertex;
+	v3 offset;
+} Displacement;
+
+typedef struct
+{
+	int disp_count;
+	Displacement *disps;	
+} MorphTarget;
 
 //returns the screen space barycentric point represented by a cartesian coordinate and the associated triangle
 v3 to_barycentric(Triangle tri, v2i cartesian)
@@ -210,8 +234,12 @@ v3 to_barycentric(Triangle tri, v2i cartesian)
 	q.y=edge1.x;
 	p.y=-p.y;
 	q.x=-q.x;
-	p = v3_div(p,det);
-	q = v3_div(q,det);
+	
+	if(abs(det) > 0)
+	{
+		p = v3_div(p,det);
+		q = v3_div(q,det);
+	}
 	cart = v3_sub(cart,tri.c);
 	bary.x = p.x*cart.x+q.x*cart.y;
 	bary.y = p.y*cart.x+q.y*cart.y;
@@ -374,10 +402,11 @@ typedef struct
 	bool draw_hud;
 	bool draw_camera_gizmo;
 	bool render_scene;
-	Color background_pixels[vm_width*vm_height];
-	Color hud_pixels[vm_width*100];
+	Triangle mesh_data[20000];
+	Color texture_data[100*100];
 } GameStatus;
 
+float z_buffer[vm_width*vm_height];
 
 GameStatus *g = (GameStatus *)&mem.RAM[start_address];
 
@@ -387,6 +416,19 @@ void delete_entity(int i)
 }
 #define cur_tex (g->global_texture)
 #define cur_pix (cur_tex.pixels)
+
+fill(Color col)
+{
+	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
+		cur_pix[i] = col;
+}
+
+clear()
+{
+	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
+		cur_pix[i] = 0;
+}
+
 fill_rect(Color color, Rect rect)
 {
 	int x_min = clamp_int(rect.x, 0, cur_tex.width);
@@ -492,6 +534,110 @@ draw_sprite_t(Sprite s, int x, int y)
 		if(col != 0)
 			cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
 	}
+}
+
+typedef Color (*Shader)(Triangle tri, void *state);
+
+Color foo_colors[9] = {red, green, blue, cyan, magenta, yellow, white, brown,black};
+Color test_shader(Triangle tri, void *state)
+{
+	int i = (int)*state;
+	return foo_colors[i%9];
+}
+
+v3 centroid(Triangle tri)
+{
+	return (v3)
+	{
+		(tri.a.x+tri.b.x+tri.c.x)/3,
+		(tri.a.y+tri.b.y+tri.c.y)/3,
+		(tri.a.z+tri.b.z+tri.c.z)/3,
+	};
+}
+
+v3 v3_cross(v3 a, v3 b)
+{
+	return (v3)
+	{
+		a.y*b.z-a.z*b.y,
+		a.z*b.x-a.x*b.z,
+		a.x*b.y-a.y*b.x,
+	};
+}
+
+v3 light = {0,0,-1};
+Color flat_shaded(Triangle tri, void *state)
+{
+	//float theta =M_PI/4;
+	//light = (v3){cos(theta),0,sin(theta)};
+	v3 p = v3_normalized(v3_sub(tri.a,tri.c));
+	v3 q = v3_normalized(v3_sub(tri.b,tri.c));
+
+	v3 normal = v3_normalized(v3_cross(p,q));
+	float d = v3_dot(light, normal);
+	d = d < 0 ? 0 : d;
+	byte lighting = (byte)(255*d);
+	Color col = lighting<<16|lighting<<8|lighting;
+	return col;
+}
+
+Color terrain_shader(Triangle tri, void *state)
+{
+	float elevation = centroid(tri).z;
+
+	return ((int)(elevation))<<8;
+}
+typedef struct
+{
+	Shader shader;
+	void *state;	
+} Material;
+
+void shade_triangle(Triangle tri, Material mat)
+{
+	//bounding box
+	int x_min = min_3(tri.a.x, tri.b.x, tri.c.x);
+	int x_max = max_3(tri.a.x, tri.b.x, tri.c.x);
+	int y_min = min_3(tri.a.y, tri.b.y, tri.c.y);
+	int y_max = max_3(tri.a.y, tri.b.y, tri.c.y);
+	
+	x_min = clamp_int(x_min, 0, cur_tex.width-1);
+	x_max = clamp_int(x_max, 0, cur_tex.width-1);
+	y_min = clamp_int(y_min, 0, cur_tex.height-1);
+	y_max = clamp_int(y_max, 0, cur_tex.height-1);
+
+	v3 edge1 = v3_sub(tri.a,tri.c);
+	v3 edge2 = v3_sub(tri.b,tri.c);
+	v3 p = edge1;
+	v3 q = edge2;
+	float det = p.x*q.y-p.y*q.x;
+	p.x=edge2.y;
+	q.y=edge1.x;
+	p.y=-p.y;
+	q.x=-q.x;
+	if(abs(det) > 0)
+	{
+		p = v3_div(p,det);
+		q = v3_div(q,det);
+	}
+
+	for (int y = y_min; y <= y_max; ++y)
+	for (int x = x_min; x <= x_max; ++x)
+	{
+		//v3 bary = to_barycentric(tri,(v2i){x,y});
+		v3 bary = to_barycentric_quick((v2){tri.c.x,tri.c.y},(v2){p.x,p.y},(v2){q.x,q.y},(v2){x,y});
+
+		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
+		{
+			float z = ((bary.x*tri.a.z+bary.y*tri.b.z+bary.z*tri.c.z));
+
+			if(z > z_buffer[y*cur_tex.width+x])
+			{
+				cur_pix[y*cur_tex.width+x] = mat.shader(tri, mat.state);
+				z_buffer[y*cur_tex.width+x] = z;
+			};
+		}
+	}	
 }
 
 void fill_triangle(Triangle tri, Color col)
@@ -624,11 +770,27 @@ print_cube(Cube c)
 	printf(" }\n");	
 }
 
-print_v3(char* name, v3 v)
+print_v3(char* label, v3 v)
 {
-	printf("%s: { %f, %f, %f }\n", name, v.x, v.y, v.z);
+	printf("%s: { %f, %f, %f }\n", label, v.x, v.y, v.z);
 }
+u32 mesh_cursor = 0;
 
+typedef struct
+{
+	u32 index;
+	u32 count;
+} Mesh;
+
+Mesh terrain_mesh;
+
+print_triangle(char* label, Triangle t)
+{
+	printf("%s\n", label);
+	print_v3("\ta", t.a);
+	print_v3("\tb", t.b);
+	print_v3("\tc", t.c);
+}
 Entity block(Transform t)
 {
 	return 
@@ -642,9 +804,23 @@ Entity block(Transform t)
 	};
 }
 
+Entity rupee(v3 position)
+{
+	return (Entity)
+	{
+		.entity_type = Pickup,
+		.pickup_type = Rupee,
+		.transform = (Transform){.position = position,0,0,0,.5f,.5f,1},
+		.draw_sprite = true,
+		.color = blue,
+		.sprite = &g->rupee,
+		.var = 1,
+	};	
+}
+
 #define player (g->entities[0])
 #define default_transform {0,0,0,0,0,0,1,1,1}
-void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
+Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
 void draw_terrain();
 
 #define screen_texture ((Texture) { vm_width, vm_height, mem.frame_buffer.pixels })
@@ -683,8 +859,6 @@ void regenerate_heart_sprites()
 	fill_circle(0xFFFF8888,(v2i){x_offset+4,y_offset+4}, 2);
 
 	#define next_sprite() cur_pix += sizeof(Sprite)/sizeof(Color)
-	//outline(cur_tex,0xFD000000, 0xFE000000);
-	g->cur_health=19;
 	next_sprite();
 	draw_sprite_t(g->heart,0,0);
 	next_sprite();
@@ -722,22 +896,19 @@ init()
 		.max_health = 40,
 		.cur_magic = 100,
 		.max_magic = 100,
-		.current_gamestate = Field,
 		.entity_count = 11,
 		.entities =
 		{
+			(Entity)
 			{
 				.entity_type = Player,
 				.transform = (Transform){1,0,1,0,0,0,1,1,1},
 				.do_draw_rect = true,
 				.color = green,
 			},
-			block((Transform){-3,0,1,0,0,0,1,1,1}),
-			block((Transform){5,0,0,0,0,0,10,1,1}),
-			block((Transform){0,0,5,0,0,0,1,1,10}),
-			block((Transform){-0,3,4,0,0,0,1,1,1}),
-			block((Transform){-1,4,5,0,0,0,1,1,1}),
-			block((Transform){-2,5,6,0,0,0,1,1,1}),
+			block((Transform){4.5f,0,0,0,0,0,10,1,1}),
+			block((Transform){0,0,5.5f,0,0,0,1,1,10}),
+			(Entity)
 			{
 				.entity_type = Enemy,
 				.transform = (Transform){ {4,0,-1},.scale = {1,1,1}},
@@ -745,63 +916,66 @@ init()
 				.color = red,
 				.solid = true,
 			},
+			(Entity)
 			{
 				.entity_type = Pickup,
 				.pickup_type = Heart,
 				.transform = (Transform){4,0,-2,0,0,0,.5f,.5f,.5f},
-				.do_draw_rect = true,
-				.color = red,
+				//.do_draw_rect = true,
+				.draw_sprite = true,
+				.sprite = &g->heart,
+				.color = 0xFFAA00,
 			},
+			(Entity)
 			{
 				.entity_type = Pickup,
 				.pickup_type = HeartContainer,
-				.transform = (Transform){4,0,-3,0,0,0,1,1,1},
+				.transform = (Transform){6,0,-3,0,0,0,1,1,1},
 				.do_draw_rect = true,
 				.color = red,
 			},
-			{
-				.entity_type = Pickup,
-				.pickup_type = Rupee,
-				.transform = (Transform){-2,0,-3,0,0,0,.5f,.5f,1},
-				.draw_sprite = true,
-				.sprite = &g->rupee,
-				.var = 1,
-			},											
+			rupee((v3){-2,0,-3}),
+			rupee((v3){-3,0,-3}),
+			rupee((v3){-4,0,-3}),
+			rupee((v3){-5,0,-3}),
+			rupee((v3){-6,0,-3}),										
 		},
 		.global_texture = screen_texture,
 		.draw_hud = true,
 		.render_scene = true,
-		.draw_camera_gizmo = true,
+		.draw_camera_gizmo = false,
 		.camera = (Transform){0,0,-1,0,0,0,.2,.2,.2},
 	};
 
 	#define rupee_texture ((Texture){sprite_size,sprite_size, g->rupee.pixels})
-
+	int x = 2;
+	int y = 2;
 	cur_tex = rupee_texture;
+
 	Triangle tri = (Triangle)
 	{
-		.a = {16/2,0,0},
-		.b = {4,4,0},
-		.c = {16-4,4,0},
+		.a = {x+16/2, y+0,0},
+		.b = {x+4,    y+4,0},
+		.c = {x+16-4, y+4,0},
 	};
 
 	fill_triangle(tri,green);
-	fill_rect(green,(Rect){4,4,9,8});
+	fill_rect(green,(Rect){x+4,y+4,9,8});
 	tri = (Triangle)
 	{
-		.a = {16/2,16-1,0},
-		.b = {16-4,16-4,0},
-		.c = {4,16-4,0},
+		.a = {x+16/2,y+16-0,0},
+		.b = {x+16-4,y+16-4,0},
+		.c = {x+4,y+16-4,0},
 	};
 	fill_triangle(tri,green);
-
-
+	outline(0x007700, green);
+	outline(1,0x007700);
 	regenerate_heart_sprites();
-
 	cur_tex = screen_texture;
 
 
-	generate_terrain(16,16,16,16);
+	terrain_mesh = generate_terrain(16,16,16,16);
+	mesh_cursor = 0;
 }
 
 memset_u32_4wide(u32 *p, int value, int count)
@@ -918,7 +1092,7 @@ splash_screen()
 	//fill_circle(red,(v2i){12,4},4.9f);
 
 	//fade up from black, show brushfire logo, fade to black, transition to title screen
-
+	g->current_gamestate++;
 }
 
 title_screen()
@@ -926,23 +1100,27 @@ title_screen()
 
 	//draw game logo, press start text fading in and out, sword in stone in background in forest, animated glint on logo text, stretch goal fade to cut scene
 	//draw_text("press start",)
+	g->current_gamestate++;
 
 }
 
 file_select()
 {
-
+	g->current_gamestate++;
 }
+
 
 field()
 {
+
 	v3 forward;
 	v3 right;
 	v3 hand;
 	v3 sword_tip;
 	static v3 player_forward = v3_forward;
 
-	generate_terrain(16,16,16,16);
+	terrain_mesh = generate_terrain(16,16,16,16);
+	mesh_cursor = 0;
 	regenerate_heart_sprites();
 	cur_tex=screen_texture;
 	//update
@@ -1139,34 +1317,28 @@ field()
 
 	//render
 	{
+		for (int i = 0; i < vm_width*vm_height; ++i)
+		{
+			z_buffer[i] = -1000;
+		}
 		//scene
 		if(g->render_scene)
 		{
 			//environment
 			{
-				static bool first = true;
-				#define background_texture ((Texture){.pixels = g->background_pixels,.width = vm_width,.height = vm_height})
-				//if(first)
-				{
-					first=false;
-					cur_tex = background_texture;
-					sky();
-					sun();
-					mountains();
-					draw_terrain();
-					cur_tex = screen_texture;
-				}
-				draw_tex(background_texture,0,0);
+				sky();
+				sun();
+				mountains();
+				draw_terrain();
+				//render_mesh(terrain_mesh, (Material){terrain_shader},(Transform)default_transform);
 			}
 
 			for (int i = 0; i < g->entity_count; ++i)
 			{
-				if(g->entities[i].do_draw_rect)
-				{
-					render_rect(g->entities[i].color, g->entities[i].transform);
-				}
 				if(g->entities[i].draw_sprite)
-					draw_sprite_t(*(g->entities[i].sprite),(vm_width-unit_size)/2+g->entities[i].transform.position.x*unit_size,(vm_height-unit_size)/2-g->entities[i].transform.position.z*unit_size);
+					draw_sprite_t(*(g->entities[i].sprite),(vm_width-sprite_size)/2+g->entities[i].transform.position.x*unit_size,(vm_height-sprite_size)/2-g->entities[i].transform.position.z*unit_size);
+				if(g->entities[i].do_draw_rect)
+					render_rect(g->entities[i].color, g->entities[i].transform);
 			}
 
 			if(g->draw_camera_gizmo)
@@ -1182,19 +1354,15 @@ field()
 				render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
 			}
 		}
+		else
+			fill(blue);
 
 		//HUD
 		if(g->draw_hud)
 		{
-			#define hud_texture ((Texture){vm_width,vm_height,g->hud_pixels})
 			static int prev_health = -1;
 			if(true)//(prev_health != g->cur_health)
 			{
-				cur_tex = hud_texture;
-				for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
-				{
-					cur_pix[i]=0;
-				}
 				//health bar
 				{
 					int full_hearts = g->cur_health / 4; 
@@ -1204,7 +1372,7 @@ field()
 					int heart_width = sprite_size;
 					int x_offset = 6;
 					int y_offset = 6;
-					static int x_padding = 0;
+					int x_padding = 2;
 					int y_padding = -3;
 					int hearts_per_row = 10;
 
@@ -1245,24 +1413,14 @@ field()
 
 				//wallet
 				{
+					fill_rect(green, (Rect){0,vm_height-5,g->cur_rupees,5});
 					//todo grab fontset file from platfighter project for text drawing
 				}
 
 				//command buttons
 				{
-					Color col = black;
-					float rad = 33;
-					float t = 0;
-					int count = 12;
-					for (int i = 0; i <= count; ++i)
-					{
-						rad-=.1f;
-						t = i/(float)count;
-						col = (Color)(0xFF*t);
-						
-						fill_circle(col, (v2i){vm_width/2+32,48}, rad);
-					}
-
+					fill_circle2(black, (v2){vm_width/2+32,48}, 35, 1.5f);
+					fill_circle2(blue, (v2){vm_width/2+32,48}, 33, 1);
 
 					//todo render
 					{
@@ -1273,27 +1431,15 @@ field()
 
 				//item buttons
 				{
-					Color col = black;
-					float rad = 17;
-					float t = 0;
-					int count = 12;
-					for (int i = 0; i <= count; ++i)
-					{
-						rad-=.1f;
-						t = i/(float)count;
-						unsigned char r = (unsigned char)(0xFF*t);
-						unsigned char g = (unsigned char)(0xFF*t);
-						col=(r << 16) | (g<<8);
-						fill_circle(col,(v2i){vm_width-(32+32+32+32),32}, rad);
-						fill_circle(col,(v2i){vm_width-(32+32+32), 64}, rad);
-						fill_circle(col,(v2i){vm_width-(32+32),32}, rad);
-					}
+					float rad = 16;
+					fill_circle2(yellow,(v2){vm_width-(32+32+32+32),32}, rad, 1);
+					fill_circle2(yellow,(v2){vm_width-(32+32+32), 64}, rad, 1);
+					fill_circle2(yellow,(v2){vm_width-(32+32),32}, rad, 1);
 				}
 				
 				cur_tex = screen_texture;
 			}
 
-			draw_tex_t(hud_texture,0,0);
 			prev_health = g->cur_health;
 		}
 	}
@@ -1349,8 +1495,172 @@ face()
 	fill_rect(black,(Rect){65+42,31,30,4});
 }
 
+int vertex_count = 0;
+v3 vertices[20000];
+int index_count;
+int indices[100000];
+int triangle_count = 0;
+Triangle triangles[100000];
+
+
+
+Mesh cap(v3 origin, float radius, int divisions)
+{
+	#define TAU (M_PI*2)
+	u32 old_cursor = mesh_cursor;	
+	for (int i = 0; i < divisions; ++i)
+	{
+		float theta = i/(float)divisions*TAU;
+		float theta2 = (i+1)/(float)divisions*TAU;
+
+		g->mesh_data[mesh_cursor++] = (Triangle)
+		{
+			origin,
+			{ origin.x + cos(theta)*radius,  origin.y, origin.z + sin(theta)*radius },
+			{ origin.x + cos(theta2)*radius, origin.y, origin.z + sin(theta2)*radius },
+		};
+	}
+
+	return (Mesh){.index = old_cursor, .count = divisions};
+}
+
+void rot_mesh(Mesh mesh, v3 euler);
+
+Mesh cone(v3 origin, float radius, int height, int divisions)
+{
+	Mesh mesh = cap(origin, radius,divisions);
+	Mesh mesh_2 = cap(v3_zero, radius,divisions);
+	rot_mesh(mesh_2,(v3){M_PI,0,0});
+	//todo used indexed mesh rather than triangle triplet to avoid having to iterate multiple triangles
+	for (int i = 0; i < mesh.count; ++i)
+	{
+		g->mesh_data[mesh.index+i].a.y += height;
+	}
+
+	for (int i = 0; i < mesh_2.count; ++i)
+	{
+		g->mesh_data[mesh_2.index+i].a.y += origin.y;
+		g->mesh_data[mesh_2.index+i].b.y += origin.y;
+		g->mesh_data[mesh_2.index+i].c.y += origin.y;
+	}
+	
+	mesh.count+=mesh_2.count;
+	return mesh;
+}
+
+v3 v3_rotate(v3 v, v3 euler)
+{
+	v = v3_rotate_yz_plane(v,euler.x);
+	v = v3_rotate_xz_plane(v,euler.y);
+	v = v3_rotate_xy_plane(v,euler.z);
+	return v;
+}
+
+void rot_mesh(Mesh mesh, v3 euler)
+{
+	v3 *v= (v3*)&g->mesh_data[mesh.index];
+	
+	for (int i = 0; i < mesh.count*3; ++i)
+	{
+		v[i] = v3_rotate(v[i], euler);
+	}
+}
+
+v3 transform_point(v3 v, Transform t)
+{
+	v = v3_mult(v,t.scale);
+	v = v3_rotate(v,t.rotation);
+	v = v3_add(v, t.position);
+	return v;
+}
+
+render_mesh(Mesh mesh, Material mat, Transform tr)
+{
+	//transform
+	{
+
+		float *f = (float*)&g->mesh_data[mesh.index];
+
+		for (int i = 0; i < mesh.count*9; ++i)
+		{
+			f[i] *= unit_size;
+		}
+
+		v3 *v = (v3*)&g->mesh_data[mesh.index];
+		for (int i = 0; i < mesh.count*3; ++i)
+		{
+			v[i] = transform_point(v[i], tr);
+		}
+
+		for (int i = 0; i < mesh.count*3; ++i)
+		{
+
+			float temp = v[i].y;
+			v[i].y = v[i].z;
+			v[i].z = temp;
+			
+			v[i].y = -v[i].y;
+			v[i].x+= vm_width/2;
+			v[i].y+= vm_height/2;
+
+			v[i].z+=3;
+			v[i].z/=2;
+		}
+	}
+
+	//rasterize
+	{
+		for (int i = 0; i < mesh.count; ++i)
+		{
+			shade_triangle(g->mesh_data[mesh.index+i], mat);
+		}
+	}
+}
+
+void mesh_test()
+{
+	clear();
+	for (int i = 0; i < vm_width*vm_height; ++i)
+	{
+		z_buffer[i] = -1000;
+	}
+	static int foo = 8;
+	static float t =0;
+	t+=g->delta_time;
+
+	if(t>1.5f){
+		t=0;
+		foo++;
+	}
+	float height = 2;
+	float half_height = height/2;
+	static float rad= 3;
+	Mesh cylinder_cap = cap((v3){0,-half_height, 0}, rad, foo);
+	Mesh cylinder_cap2 = cone((v3){0, half_height, 0}, rad, height, foo);
+	static float fleep;
+
+	fleep+=g->delta_time;
+	cylinder_cap.count+=cylinder_cap2.count;
+	render_mesh(cylinder_cap, (Material){flat_shaded},(Transform){cos(fleep),0,0,0,0,fleep,1,4,1});
+	if(GetAsyncKeyState('F'))
+	for (int i = 0; i < vm_width*vm_height; ++i)
+	{
+		if(z_buffer[i] != -1000){
+			z_buffer[i]+=55;
+			cur_pix[i]=(int)z_buffer[i];
+
+		}
+	}
+
+	if(fleep > TAU)
+		fleep-=TAU;
+
+	mesh_cursor = 0;
+}
+
 void (*scenes[scene_count])(void) = 
 {
+	[MeshTest] = &mesh_test,
 	[Face] = &face,
 	[SplashScreen] = &splash_screen,
 	[TitleScreen] = &title_screen,
@@ -1362,34 +1672,45 @@ void (*scenes[scene_count])(void) =
 
 void _tick()
 {
+	static bool was = false;
+	if(GetAsyncKeyState(VK_TAB))
+	{
+		if(!was)
+		{
+			was = true;
+			g->current_gamestate = (g->current_gamestate + 1) % scene_count;
+		}
+	}
+	else
+	{
+		was = false;
+	}
 	(scenes[g->current_gamestate])();
 	g->previous_padstate = mem.game_pads[0];
-	g->time+= g->delta_time;
+	g->time += g->delta_time;
 }
 
-int vertex_count = 0;
-v3 vertices[20000];
-int index_count;
-int indices[100000];
-int triangle_count = 0;
-Triangle triangles[100000];
-void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z)
+Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z)
 {
 	int verts_wide = subdivs_x+1;
 	int verts_deep = subdivs_z+1;
 	vertex_count = (verts_wide)*(verts_deep);
 	index_count = 6*subdivs_x*subdivs_z;
 
-	v2i floop = {(int)(sin(g->time)*10),6};
-	float rad = g->time;
 
-	float height = (cos(g->time/10)+1)*100;
+	//todo delete this
+	float t = 2.5f;
+
+	v2i floop = {(int)(sin(t)*10),6};
+	float rad = t;
+
+	float height = (cos(t/10)+1)*100;
 	for (int z = 0; z < verts_deep; ++z)
 	for (int x = 0; x < verts_wide; ++x)
 	{
 		float sc_x = (x/(float)subdivs_x)*scale_x;
 		float sc_z = (z/(float)subdivs_z)*scale_z;
-		float first_octave = 0;
+		float first_octave = .01f;
 		float off =.2f;
 		float second_octave = 0;
 		float dist = v2i_dist((v2i){x,z}, floop);
@@ -1426,13 +1747,17 @@ void generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 		v3 b = vertices[indices[i+1]];
 		v3 c = vertices[indices[i+2]];
 
-		triangles[i/3] = (Triangle)
+		g->mesh_data[mesh_cursor+i/3] = (Triangle)
 		{
 			{a.x,a.y,a.z},
 			{b.x,b.y,b.z},
 			{c.x,c.y,c.z},
 		};
 	}
+
+	Mesh result = (Mesh){.index=mesh_cursor,.count=triangle_count};
+	mesh_cursor+=triangle_count;
+	return result;
 }
 
 Triangle render_tris[10000];
@@ -1455,7 +1780,7 @@ void draw_terrain()
 	if(index >= 0)
 	//move player
 	{
-		Triangle tri = triangles[index];
+		Triangle tri = g->mesh_data[terrain_mesh.index+index];
 		tri = (Triangle)
 		{
 			{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
@@ -1470,15 +1795,16 @@ void draw_terrain()
 		};
 
 		v3 bary = to_barycentric(tri,foo);
-
+		print_v3("bary",bary);
 
 		float y = bary.x*tri.a.z+bary.y*tri.c.z+bary.z*tri.b.z;
 		player.transform.position.y = y;
+		printf("%f\n",y);
 	}
 
 	for (int i = 0; i < triangle_count; ++i)
 	{
-		Triangle tri = triangles[i];
+		Triangle tri = g->mesh_data[terrain_mesh.index+i];
 		render_tris[i] = (Triangle)
 		{
 			{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
@@ -1489,29 +1815,9 @@ void draw_terrain()
 
 	for (int i = 0; i < triangle_count; ++i)
 	{
-		Triangle tri = triangles[i];
+		Triangle tri = g->mesh_data[terrain_mesh.index+i];
 		bool player_above = (index == i);
 		Color col = (player_above) ? red : ((int)((tri.a.y+tri.b.y+tri.c.y)/3) << 8);
 		fill_triangle(render_tris[i], col);
 	}
 }
-
-//notes
-/*
-things to implement:
-push blocks, torches, chests
-doors, locked doors, shop, signs, octorocks, shield, jumping over gaps, climbing up ledges
-you will need triangle rendering, meshes, particles, skeletal animation, 
-7/3/2023
-After work today, I need to implement a) basic triangle rasterization b) generalize drawing to have a "global texture"
-so that you can switch from drawing to the screen to drawing into sprites, texture maps, etc.
-
-Once you have basic triangle rasteriztion in place, you need to add a basic 3d transform pipeline.
-
-Then do terrain (including collision). Then do animation (you don't necessarily need a complete animation system, possibly just some basic lerps and easing functions),
-
-Then start working on making prettier assets
-
-7/14/2023
-All right, back to work, we got the basic rasterizer in place, so this evening do the "global texture" and get back to terrain generation (and adding terrain collision)
-*/

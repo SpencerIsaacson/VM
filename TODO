@@ -5,8 +5,28 @@ get assembler working again CHECK
 get functions/stack working in assembly
 build pseudo-compiler
 incorporate sound CHECK
-incorporate gamepad
+incorporate gamepad CHECK
 remove SDL/switch to win32
 port 2D platformer to bytecode
 build 3D Zelda dungeon
 port to bytecode
+
+//notes
+/*
+things to implement:
+push blocks, torches, chests
+doors, locked doors, shop, signs, octorocks, shield, jumping over gaps, climbing up ledges
+you will need triangle rendering, meshes, particles, skeletal animation, 
+7/3/2023
+After work today, I need to implement a) basic triangle rasterization b) generalize drawing to have a "global texture"
+so that you can switch from drawing to the screen to drawing into sprites, texture maps, etc.
+
+Once you have basic triangle rasteriztion in place, you need to add a basic 3d transform pipeline.
+
+Then do terrain (including collision). Then do animation (you don't necessarily need a complete animation system, possibly just some basic lerps and easing functions),
+
+Then start working on making prettier assets
+
+7/14/2023
+All right, back to work, we got the basic rasterizer in place, so this evening do the "global texture" and get back to terrain generation (and adding terrain collision) CHECK
+*/

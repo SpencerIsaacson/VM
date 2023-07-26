@@ -31,19 +31,22 @@ void fill_audio(void *udata, Uint8 *stream, int len)
 
 void main(int argc, char **argv)
 {
-	// if(argc > 1)
-	// {
-	// 	if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
-	// 	{
-	// 		printf("stronkbox version: 0.0.0\n");
-	// 		exit(0);
-	// 	}
-	// 	else
-	// 	{
-	// 		printf("unrecognized commandline argument \"%s\"\n", argv[1]);
-	// 		exit(1);
-	// 	}
-	// }
+	if(argc > 1)
+	{
+		if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
+		{
+			printf("humidor version: 0.0.0\n");
+			exit(0);
+		}
+		else
+		{
+			if(!(argv[1][0] == '-' && argv[1][1] == 0))
+			{
+				printf("unrecognized commandline argument \"%s\"\n", argv[1]);
+				exit(1);
+			}
+		}
+	}
 
 	reset();
 	//load rom
@@ -87,7 +90,7 @@ void main(int argc, char **argv)
 		SDL_PauseAudioDevice(device, 0);
     }
 
-	SDL_Window *window = SDL_CreateWindow("StronkBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vm_width*scale_factor, vm_height*scale_factor, 0);
+	SDL_Window *window = SDL_CreateWindow("Humidor", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vm_width*scale_factor, vm_height*scale_factor, 0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
 	Color* pixels = (Color*)surface->pixels;
 

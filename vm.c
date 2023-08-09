@@ -2,6 +2,7 @@
 #define megabyte (1024*1024)
 
 typedef unsigned char byte;
+typedef unsigned char u8;
 typedef signed int s32;
 typedef unsigned int u32;
 typedef signed long long s64;
@@ -29,6 +30,7 @@ typedef union Memory
 {
 	struct
 	{
+		byte        padding[capacity-(sizeof(GamePad)*4+sizeof(AudioBuffer)+sizeof(FrameBuffer))];
 		GamePad     game_pads[4];
 		AudioBuffer audio_buffer;
 		FrameBuffer frame_buffer;
@@ -39,9 +41,6 @@ typedef union Memory
 
 typedef struct CPU
 {
-	u32 A;
-	u32 B;
-	u32 O;
 	int PC; //program counter
 	int NPC; //next program counter.just a helper value
 	short SP; //stack pointer not in use yet
@@ -49,61 +48,80 @@ typedef struct CPU
 	bool halted;
 } CPU;
 
-typedef struct StronkBox
+typedef struct Humidor
 {
 	CPU cpu;
 	Memory memory;
-} StronkBox;
+} Humidor;
 
-StronkBox stronkbox;
+Humidor humidor;
 
 typedef enum
 {
 	IMM = 0,
 	IND = 1,
-} AddressingMode;
+} AddrMode;
+
+#define a_mode(op) ((AddrMode)((op & 0x80) >> 7))
+#define b_mode(op) ((AddrMode)((op & 0x40) >> 6))
+#define c_mode(op) ((AddrMode)((op & 0x20) >> 5))
 
 typedef enum OpCode
 {
+	//basics
 	OP_NOP,
-	OP_SET,
-	OP_MULT,
 	OP_INC,
+	OP_DEC,
+	OP_SET,
+	//arithmetic
 	OP_ADD,
-	OP_JLT,
+	OP_SUB,
+	OP_MULT,
+	OP_DIV,
+	//logic/bitwise
+	OP_NOT,
+	OP_AND,
+	OP_OR,
+	OP_XOR,
+	OP_LSL,
+	OP_RSL,
+	//branch/jump
 	OP_JMP,
+	OP_JLT,
+	OP_JGT,
+	OP_JEQ,
+	OP_JNE,
+	//cpu state
 	OP_HALT,
+	opcode_count,
 } OpCode;
 
-char* OpNames[8] = 
+char* OpNames[0] = 
 {
-	"NOP",
-	"SET",
-	"MULT",
-	"INC",
-	"ADD",
-	"JLT",
-	"JMP",
-	"HALT",
+	// "NOP",
+	// "SET",
+	// "MULT",
+	// "INC",
+	// "ADD",
+	// "JLT",
+	// "JMP",
+	// "HALT",
 };
 
-#define RAM stronkbox.memory.RAM
-#define A   stronkbox.cpu.A
-#define B   stronkbox.cpu.B
-#define O   stronkbox.cpu.O
-#define PC  stronkbox.cpu.PC
-#define NPC stronkbox.cpu.NPC
+#define RAM humidor.memory.RAM
+#define PC  humidor.cpu.PC
+#define NPC humidor.cpu.NPC
 
 //helpers
-#define start_address ((sizeof(stronkbox.memory.game_pads)+sizeof(stronkbox.memory.audio_buffer)+sizeof(stronkbox.memory.frame_buffer))/sizeof(u32))
-#define screen_address ((sizeof(stronkbox.memory.game_pads)+sizeof(stronkbox.memory.audio_buffer))/sizeof(u32))
+#define start_address 0
+#define screen_address ((sizeof(humidor.memory.padding)+sizeof(humidor.memory.game_pads)+sizeof(humidor.memory.audio_buffer))/sizeof(u32))
 
 
 #include "live_assembler.c"
 
 void reset()
 {
-	memset(&stronkbox, 0, sizeof(stronkbox));
+	memset(&humidor, 0, sizeof(humidor));
 	PC = start_address;
 }
 
@@ -145,7 +163,7 @@ void op_set(OpCode op)
 
 void tick()
 {
-	if(!stronkbox.cpu.halted)
+	if(!humidor.cpu.halted)
 	{
 		OpCode op = RAM[PC];
 
@@ -247,7 +265,7 @@ void tick()
 			case OP_HALT:
 			{
 				printf("HALTED!\n");
-				stronkbox.cpu.halted = true;
+				humidor.cpu.halted = true;
 			} break;
 			default:
 			{
@@ -263,58 +281,167 @@ void tick()
 	}
 }
 
+u32 arg1,arg2,arg3;
 
-void execute (int count, u32 ops[])
+void decode_1_arg(u32 op, OpCode opcode)
+{
+	arg1 = (op & 0xFFFFFF);
+	if(a_mode(opcode))
+		arg1 = RAM[arg1];
+}
+
+void decode_2_arg(u32 op, OpCode opcode)
+{
+	arg1 = (op & 0xFF0000) >> 16;
+	arg2 = (op & 0xFFFF);
+	if(op & 0x80000000)
+		arg1 = RAM[arg1];
+	if(op & 0x40000000)
+	{
+		arg2 = RAM[arg2];
+		if(op & 0x20000000)
+			arg2 = RAM[arg2];
+	}
+}
+
+void decode_3_arg(u32 op, OpCode opcode)
+{
+	arg1 = (op & 0xFF0000) >> 16;
+	arg2 = (op & 0xFF00) >> 8;
+	arg3 = (op & 0xFF);
+	if(op & 0x80000000)
+		arg1 = RAM[arg1];
+	if(op & 0x40000000)
+		arg2 = RAM[arg2];
+	if(op & 0x20000000)
+		arg3 = RAM[arg3];
+}
+
+//used for shifts. Since a shift can only be 0-31, only used 5 bits for arg3 and gave the extra bits to arg2
+void decode_shift_arg(u32 op, OpCode opcode)
+{
+	arg1 = (op & 0xFF0000) >> 16;
+	arg2 = (op & 0xFFE0) >> 5;
+	arg3 = (op & 0x1F);
+	if(op & 0x80000000)
+		arg1 = RAM[arg1];
+	if(op & 0x40000000)
+		arg2 = RAM[arg2];
+	if(op & 0x20000000)
+		arg3 = RAM[arg3];
+}
+
+void execute(int count, u32 ops[])
 {
 	for (int i = 0; i < count; ++i)
 	{
 		u32 op = ops[i];
 		OpCode opcode = (op & 0x1F000000) >> 24;
+		NPC = PC+1;
+		//todo bounds check args
 		switch(opcode)
 		{
-			case OP_NOP:
-				break;
-			case OP_SET:
-				break;
-			case OP_MULT:
-				break;
-			case OP_INC:
-				break;
-			case OP_ADD:
+			//basics
 			{
-				u32 *a;
-				u32 *b;	
-				u32 *c;
-				
-				if(a_mode(opcode))
-					a = &RAM[RAM[RAM[PC+1]]];
-				else
-					a = &RAM[RAM[PC+1]];
-
-				if(b_mode(opcode))
-					b = &RAM[RAM[PC+2]];
-				else
-					b = &RAM[PC+2];
-				
-				if(c_mode(opcode))
-					c = &RAM[RAM[PC+3]];
-				else
-					c = &RAM[PC+3];
-				
-				*a = (*b) + (*c);
-			} break;
-			case OP_JLT:
-				break;
-			case OP_JMP:
-				break;
-			case OP_HALT:
-				break;
+				case OP_NOP:
+					break;
+				case OP_INC:
+					decode_1_arg(op, opcode);
+					RAM[arg1]++;
+					break;
+				case OP_DEC:
+					decode_1_arg(op, opcode);
+					RAM[arg1]--;				
+					break;			
+				case OP_SET:
+					decode_2_arg(op, opcode);
+					RAM[arg1] = arg2;
+					break;
+			}
+			//arithmetic
+			{
+				case OP_ADD:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2+arg3;
+					break;
+				case OP_SUB:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2-arg3;
+					break;
+				case OP_MULT:
+					//decode_3_arg(op, opcode);
+					RAM[arg1] = arg2*arg3;
+					break;
+				case OP_DIV:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2/arg3;
+					break;
+			}
+			//logic/bitwise ops
+			{
+				case OP_NOT:
+					decode_2_arg(op, opcode);
+					RAM[arg1] = !arg2;
+					break;
+				case OP_AND:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2 & arg3;
+					break;							
+				case OP_OR:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2 | arg3;
+					break;				
+				case OP_XOR:
+					decode_3_arg(op, opcode);
+					RAM[arg1] = arg2 ^ arg3;
+					break;				
+				case OP_LSL:
+					decode_shift_arg(op, opcode);
+					RAM[arg1] = arg2 << arg3;
+					break;
+				case OP_RSL:
+					decode_shift_arg(op, opcode);
+					RAM[arg1] = arg2 >> arg3;
+					break;
+			}
+			//branch/jump
+			{
+				case OP_JMP:
+					decode_1_arg(op, opcode);
+					NPC = arg1;
+					break;
+				case OP_JEQ:
+					decode_3_arg(op, opcode);
+					if(arg2 == arg3)
+						NPC = arg1;
+					break;
+				case OP_JNE:
+					decode_3_arg(op, opcode);
+					if(arg2 != arg3)
+						NPC = arg1;
+					break;
+				case OP_JLT:
+					decode_3_arg(op, opcode);
+					if(arg2 < arg3)
+						NPC = arg1;
+					break;
+				case OP_JGT:
+					decode_3_arg(op, opcode);
+					if(arg2 > arg3)
+						NPC = arg1;
+					break;
+			}
+			//cpu state
+			{
+				case OP_HALT:
+					humidor.cpu.halted = true;
+					return;
+			}
 		}
+
+		PC = NPC;
 	}
 }
 #undef RAM
-#undef A
-#undef B
-#undef O
 #undef PC
 #undef NPC

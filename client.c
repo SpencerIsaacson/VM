@@ -11,18 +11,18 @@
 #include "vm.c"
 static bool window_is_open = true;
 int scale_factor = 1;
-#define mem stronkbox.memory
+#define mem humidor.memory
 
 void fill_audio(void *udata, Uint8 *stream, int len)
 {
 	int *foo = (int *)stream;
-	for(int i = 0; i < len/4; i++, stronkbox.cpu.sample_cursor++)
+	for(int i = 0; i < len/4; i++, humidor.cpu.sample_cursor++)
 	{
-		foo[i] = mem.audio_buffer.samples[stronkbox.cpu.sample_cursor];
-		mem.audio_buffer.samples[stronkbox.cpu.sample_cursor] = 0;
-		if(stronkbox.cpu.sample_cursor == audio_sample_capacity)
+		foo[i] = mem.audio_buffer.samples[humidor.cpu.sample_cursor];
+		mem.audio_buffer.samples[humidor.cpu.sample_cursor] = 0;
+		if(humidor.cpu.sample_cursor == audio_sample_capacity)
 		{
-			stronkbox.cpu.sample_cursor = 0;
+			humidor.cpu.sample_cursor = 0;
 		}
 	}
 }
@@ -55,7 +55,7 @@ void main(int argc, char **argv)
 		fseek(file, 0, SEEK_END);
 		int c = ftell(file);
 		rewind(file);
-		fread(&stronkbox.memory.RAM[start_address],c,1,file);
+		fread(&humidor.memory.RAM[start_address],c,1,file);
 		fclose(file);
 	}
 
@@ -202,6 +202,7 @@ void main(int argc, char **argv)
 		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
     	SDL_UpdateWindowSurface(window);
 		prev = cur;
+#if DEBUG
 		static float t;
 		t+=g->delta_time;
 		if(t > 1)
@@ -210,6 +211,7 @@ void main(int argc, char **argv)
 			t=0;
 
 		}
+#endif
 
 		//Sleep(500);
 // #define clock_rate 100000000

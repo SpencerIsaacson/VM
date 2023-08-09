@@ -375,6 +375,7 @@ typedef struct
 
 typedef struct
 {
+	int zero_page[256];
 	int cur_health;
 	int max_health;
 	int cur_magic;
@@ -538,13 +539,6 @@ draw_sprite_t(Sprite s, int x, int y)
 
 typedef Color (*Shader)(Triangle tri, void *state);
 
-Color foo_colors[9] = {red, green, blue, cyan, magenta, yellow, white, brown,black};
-Color test_shader(Triangle tri, void *state)
-{
-	int i = (int)*state;
-	return foo_colors[i%9];
-}
-
 v3 centroid(Triangle tri)
 {
 	return (v3)
@@ -563,6 +557,11 @@ v3 v3_cross(v3 a, v3 b)
 		a.z*b.x-a.x*b.z,
 		a.x*b.y-a.y*b.x,
 	};
+}
+
+Color shade_solid(Triangle tri, void *state)
+{
+	return *((Color*)(state));
 }
 
 v3 light = {0,0,-1};
@@ -798,8 +797,8 @@ Entity block(Transform t)
 	{
 		.entity_type = Block,
 		.transform = t,
-		.do_draw_rect = true,
-		.color = 0xAAAAAA,
+		//.do_draw_rect = true,
+		//.color = 0xAAAAAA,
 		.solid = true,
 	};
 }
@@ -819,7 +818,7 @@ Entity rupee(v3 position)
 }
 
 #define player (g->entities[0])
-#define default_transform {0,0,0,0,0,0,1,1,1}
+#define default_transform ((Transform){0,0,0,0,0,0,1,1,1})
 Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
 void draw_terrain();
 
@@ -1053,7 +1052,13 @@ sky()
 
 mountains()
 {
-	fill_rect(brown,(Rect){0,100,vm_width,vm_height-100});
+	for (int x = 0; x < vm_width; ++x)
+	for (int y = 100; y < vm_height; ++y)
+	{
+		float col = brown;
+		col += (rand())%50;
+		cur_pix[y*vm_width+x] = (Color)col;
+	}
 }
 
 
@@ -1109,6 +1114,116 @@ file_select()
 	g->current_gamestate++;
 }
 
+int vertex_count = 0;
+v3 vertices[20000];
+int index_count;
+int indices[100000];
+int triangle_count = 0;
+Triangle triangles[100000];
+
+
+
+Mesh cap(v3 origin, float radius, int divisions)
+{
+	#define TAU (M_PI*2)
+	u32 old_cursor = mesh_cursor;	
+	for (int i = 0; i < divisions; ++i)
+	{
+		float theta = i/(float)divisions*TAU;
+		float theta2 = (i+1)/(float)divisions*TAU;
+
+		g->mesh_data[mesh_cursor++] = (Triangle)
+		{
+			origin,
+			{ origin.x + cos(theta)*radius,  origin.y, origin.z + sin(theta)*radius },
+			{ origin.x + cos(theta2)*radius, origin.y, origin.z + sin(theta2)*radius },
+		};
+	}
+
+	return (Mesh){.index = old_cursor, .count = divisions};
+}
+
+void rot_mesh(Mesh mesh, v3 euler);
+
+Mesh cone(v3 origin, float radius, int height, int divisions)
+{
+	Mesh mesh = cap(origin, radius,divisions);
+	Mesh mesh_2 = cap(v3_zero, radius,divisions);
+	rot_mesh(mesh_2,(v3){M_PI,0,0});
+	//todo used indexed mesh rather than triangle triplet to avoid having to iterate multiple triangles
+	for (int i = 0; i < mesh.count; ++i)
+	{
+		g->mesh_data[mesh.index+i].a.y += height;
+	}
+
+	for (int i = 0; i < mesh_2.count; ++i)
+	{
+		g->mesh_data[mesh_2.index+i].a.y += origin.y;
+		g->mesh_data[mesh_2.index+i].b.y += origin.y;
+		g->mesh_data[mesh_2.index+i].c.y += origin.y;
+	}
+	
+	mesh.count+=mesh_2.count;
+	return mesh;
+}
+
+v3 v3_rotate(v3 v, v3 euler)
+{
+	v = v3_rotate_yz_plane(v,euler.x);
+	v = v3_rotate_xz_plane(v,euler.y);
+	v = v3_rotate_xy_plane(v,euler.z);
+	return v;
+}
+
+void rot_mesh(Mesh mesh, v3 euler)
+{
+	v3 *v= (v3*)&g->mesh_data[mesh.index];
+	
+	for (int i = 0; i < mesh.count*3; ++i)
+	{
+		v[i] = v3_rotate(v[i], euler);
+	}
+}
+
+v3 transform_point(v3 v, Transform t)
+{
+	v = v3_mult(v,t.scale);
+	v = v3_rotate(v,t.rotation);
+	v = v3_add(v, t.position);
+	return v;
+}
+
+render_mesh(Mesh mesh, Material mat, Transform tr)
+{
+	//transform
+	{
+		v3 *v = (v3*)&g->mesh_data[mesh.index];
+		#define v3_one ((v3){1,1,1})
+		Transform cam ={(v3){-16,5,0},(v3){M_PI+.2f,0,0},v3_scale(v3_one,2)};
+		for (int i = 0; i < mesh.count*3; ++i)
+		{
+			v[i] = transform_point(v[i], tr);
+			v[i] = transform_point(v[i], cam);
+		}
+
+		for (int i = 0; i < mesh.count*3; ++i)
+		{			
+			v[i].x *= unit_size;
+			v[i].y *= unit_size;
+			v[i].x+= vm_width/2;
+			v[i].y+= vm_height/2;
+		}
+	}
+
+	//rasterize
+	{
+		for (int i = 0; i < mesh.count; ++i)
+		{
+			shade_triangle(g->mesh_data[mesh.index+i], mat);
+		}
+	}
+}
+
 
 field()
 {
@@ -1120,6 +1235,18 @@ field()
 	static v3 player_forward = v3_forward;
 
 	terrain_mesh = generate_terrain(16,16,16,16);
+
+	Triangle test_triangle = (Triangle)
+	{
+		{0,0,0},
+		{2,0,0},
+		{0,2,0},
+	};
+
+	g->mesh_data[mesh_cursor] = test_triangle;
+
+	Mesh test_mesh = cone(v3_zero, 1, 2, 4);
+
 	mesh_cursor = 0;
 	regenerate_heart_sprites();
 	cur_tex=screen_texture;
@@ -1295,6 +1422,45 @@ field()
 						g->entities[i] = g->entities[--(g->entity_count)];
 				}
 			}
+
+			//terrain collision
+			{
+				v3 foo = (v3){player.transform.position.x,player.transform.position.z, 0};
+				int column = floor(player.transform.position.x);
+				int row = floor(player.transform.position.z);
+
+				int index = -1;
+				if(!(row < 0 || column < 0))
+				{
+					float foo_x = foo.x-(int)foo.x;//fractional part
+					float foo_y = foo.y-(int)foo.y;//fractional part
+					index = (row*32+column*2)*1;
+					if(foo_x+foo_y > 1)
+						index++;
+				}
+
+				if(index >= 0)
+				//move player
+				{
+					Triangle tri = g->mesh_data[terrain_mesh.index+index];
+					tri = (Triangle)
+					{
+						{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
+						{vm_width/2+tri.c.x*unit_size,vm_height/2-tri.c.z*unit_size, tri.c.y},
+						{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
+					};
+
+					v2i foo = (v2i)
+					{
+						vm_width/2+player.transform.position.x*unit_size,
+						vm_height/2-player.transform.position.z*unit_size
+					};
+
+					v3 bary = to_barycentric(tri,foo);
+					float y = bary.x*tri.a.z+bary.y*tri.c.z+bary.z*tri.b.z;
+					player.transform.position.y = y;
+				}
+			}
 		}
 
 		if(ButtonDown(X) && g->player_animation_state != Slashing)
@@ -1329,8 +1495,12 @@ field()
 				sky();
 				sun();
 				mountains();
-				draw_terrain();
-				//render_mesh(terrain_mesh, (Material){terrain_shader},(Transform)default_transform);
+				//draw_terrain();
+				render_mesh(terrain_mesh, (Material){flat_shaded},default_transform);
+				Color col = green;
+				Transform tr = default_transform;
+				tr.position = player.transform.position;
+				render_mesh(test_mesh, (Material){shade_solid,&col},tr);		
 			}
 
 			for (int i = 0; i < g->entity_count; ++i)
@@ -1495,127 +1665,8 @@ face()
 	fill_rect(black,(Rect){65+42,31,30,4});
 }
 
-int vertex_count = 0;
-v3 vertices[20000];
-int index_count;
-int indices[100000];
-int triangle_count = 0;
-Triangle triangles[100000];
 
 
-
-Mesh cap(v3 origin, float radius, int divisions)
-{
-	#define TAU (M_PI*2)
-	u32 old_cursor = mesh_cursor;	
-	for (int i = 0; i < divisions; ++i)
-	{
-		float theta = i/(float)divisions*TAU;
-		float theta2 = (i+1)/(float)divisions*TAU;
-
-		g->mesh_data[mesh_cursor++] = (Triangle)
-		{
-			origin,
-			{ origin.x + cos(theta)*radius,  origin.y, origin.z + sin(theta)*radius },
-			{ origin.x + cos(theta2)*radius, origin.y, origin.z + sin(theta2)*radius },
-		};
-	}
-
-	return (Mesh){.index = old_cursor, .count = divisions};
-}
-
-void rot_mesh(Mesh mesh, v3 euler);
-
-Mesh cone(v3 origin, float radius, int height, int divisions)
-{
-	Mesh mesh = cap(origin, radius,divisions);
-	Mesh mesh_2 = cap(v3_zero, radius,divisions);
-	rot_mesh(mesh_2,(v3){M_PI,0,0});
-	//todo used indexed mesh rather than triangle triplet to avoid having to iterate multiple triangles
-	for (int i = 0; i < mesh.count; ++i)
-	{
-		g->mesh_data[mesh.index+i].a.y += height;
-	}
-
-	for (int i = 0; i < mesh_2.count; ++i)
-	{
-		g->mesh_data[mesh_2.index+i].a.y += origin.y;
-		g->mesh_data[mesh_2.index+i].b.y += origin.y;
-		g->mesh_data[mesh_2.index+i].c.y += origin.y;
-	}
-	
-	mesh.count+=mesh_2.count;
-	return mesh;
-}
-
-v3 v3_rotate(v3 v, v3 euler)
-{
-	v = v3_rotate_yz_plane(v,euler.x);
-	v = v3_rotate_xz_plane(v,euler.y);
-	v = v3_rotate_xy_plane(v,euler.z);
-	return v;
-}
-
-void rot_mesh(Mesh mesh, v3 euler)
-{
-	v3 *v= (v3*)&g->mesh_data[mesh.index];
-	
-	for (int i = 0; i < mesh.count*3; ++i)
-	{
-		v[i] = v3_rotate(v[i], euler);
-	}
-}
-
-v3 transform_point(v3 v, Transform t)
-{
-	v = v3_mult(v,t.scale);
-	v = v3_rotate(v,t.rotation);
-	v = v3_add(v, t.position);
-	return v;
-}
-
-render_mesh(Mesh mesh, Material mat, Transform tr)
-{
-	//transform
-	{
-
-		float *f = (float*)&g->mesh_data[mesh.index];
-
-		for (int i = 0; i < mesh.count*9; ++i)
-		{
-			f[i] *= unit_size;
-		}
-
-		v3 *v = (v3*)&g->mesh_data[mesh.index];
-		for (int i = 0; i < mesh.count*3; ++i)
-		{
-			v[i] = transform_point(v[i], tr);
-		}
-
-		for (int i = 0; i < mesh.count*3; ++i)
-		{
-
-			float temp = v[i].y;
-			v[i].y = v[i].z;
-			v[i].z = temp;
-			
-			v[i].y = -v[i].y;
-			v[i].x+= vm_width/2;
-			v[i].y+= vm_height/2;
-
-			v[i].z+=3;
-			v[i].z/=2;
-		}
-	}
-
-	//rasterize
-	{
-		for (int i = 0; i < mesh.count; ++i)
-		{
-			shade_triangle(g->mesh_data[mesh.index+i], mat);
-		}
-	}
-}
 
 void mesh_test()
 {
@@ -1702,9 +1753,9 @@ Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 	float t = 2.5f;
 
 	v2i floop = {(int)(sin(t)*10),6};
-	float rad = t;
+	float rad = 5;
 
-	float height = (cos(t/10)+1)*100;
+	float height = (cos(t/10)+1)*1;
 	for (int z = 0; z < verts_deep; ++z)
 	for (int x = 0; x < verts_wide; ++x)
 	{
@@ -1758,66 +1809,4 @@ Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 	Mesh result = (Mesh){.index=mesh_cursor,.count=triangle_count};
 	mesh_cursor+=triangle_count;
 	return result;
-}
-
-Triangle render_tris[10000];
-void draw_terrain()
-{
-	v3 foo = (v3){player.transform.position.x,player.transform.position.z, 0};
-	int column = floor(player.transform.position.x);
-	int row = floor(player.transform.position.z);
-
-	int index = -1;
-	if(!(row < 0 || column < 0))
-	{
-		float foo_x = foo.x-(int)foo.x;//fractional part
-		float foo_y = foo.y-(int)foo.y;//fractional part
-		index = (row*32+column*2)*1;
-		if(foo_x+foo_y > 1)
-			index++;
-	}
-
-	if(index >= 0)
-	//move player
-	{
-		Triangle tri = g->mesh_data[terrain_mesh.index+index];
-		tri = (Triangle)
-		{
-			{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
-			{vm_width/2+tri.c.x*unit_size,vm_height/2-tri.c.z*unit_size, tri.c.y},
-			{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
-		};
-
-		v2i foo = (v2i)
-		{
-			vm_width/2+player.transform.position.x*unit_size,
-			vm_height/2-player.transform.position.z*unit_size
-		};
-
-		v3 bary = to_barycentric(tri,foo);
-		print_v3("bary",bary);
-
-		float y = bary.x*tri.a.z+bary.y*tri.c.z+bary.z*tri.b.z;
-		player.transform.position.y = y;
-		printf("%f\n",y);
-	}
-
-	for (int i = 0; i < triangle_count; ++i)
-	{
-		Triangle tri = g->mesh_data[terrain_mesh.index+i];
-		render_tris[i] = (Triangle)
-		{
-			{vm_width/2+tri.a.x*unit_size,vm_height/2-tri.a.z*unit_size, tri.a.y},
-			{vm_width/2+tri.b.x*unit_size,vm_height/2-tri.b.z*unit_size, tri.b.y},
-			{vm_width/2+tri.c.x*unit_size,vm_height/2-tri.c.z*unit_size, tri.c.y},
-		};
-	}
-
-	for (int i = 0; i < triangle_count; ++i)
-	{
-		Triangle tri = g->mesh_data[terrain_mesh.index+i];
-		bool player_above = (index == i);
-		Color col = (player_above) ? red : ((int)((tri.a.y+tri.b.y+tri.c.y)/3) << 8);
-		fill_triangle(render_tris[i], col);
-	}
 }

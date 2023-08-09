@@ -1,1 +1,1 @@
-@"compiler/tcc" client.c -o stronk.exe -luser32 Dependencies/SDL2.dll -DDEBUG && stronk
+@"compiler/tcc" client.c -o humidor.exe -luser32 Dependencies/SDL2.dll && humidor

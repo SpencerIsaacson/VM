@@ -7,6 +7,12 @@ int next_word = start_address;
 	The fw emitters just return a u32 that represents the full instruction, and are in that way far more flexible.
 */
 
+typedef struct { AddrMode mode; u8  val; } Op8;
+typedef struct { AddrMode mode; u8  val; } Op5;
+typedef struct { AddrMode mode; u16 val; } Op11;
+typedef struct { AddrMode mode; u16 val; } Op16;
+typedef struct { AddrMode mode; u32 val; } Op24;
+
 //INSTRUCTION FORMATS
 //todo guarantee args are in proper ranges
 
@@ -16,21 +22,34 @@ int next_word = start_address;
 
 //Fixed Width
 
+//for ops that take no arguments
+u32 emit_0_arg_fw(OpCode opcode)
+{ return opcode << 24; }
+
 //for ops that take 1 24-bit arg
-u32 emit_1_arg_fw(OpCode opcode, AddrMode addr_m, u32 addr)
-{    return (((addr_m << 7) | opcode) << 24) | addr;    }
+u32 emit_1_arg_fw(OpCode opcode, Op24 addr)
+{   return (((addr.mode << 7) | opcode) << 24) | addr.val;   }
 
 //for ops that take 1 8-bit arg and 1 16-bit arg
-u32 emit_2_arg_fw(OpCode opcode, AddrMode dest_m, u8 dest, AddrMode val_m, u32 val) 
-{    return ( ((dest_m << 7) | (val_m << 6) | opcode) << 24) | (dest << 16) | (val);    }
+u32 emit_2_arg_fw(OpCode opcode, Op8 dest, Op16 val) 
+{   return ( ((dest.mode << 7) | (val.mode << 6) | opcode) << 24) | (dest.val << 16) | (val.val);   }
 
 //for ops that take 3 8-bit args
-u32 emit_3_arg_fw(OpCode opcode, AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return (((dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | opcode) << 24) | (dest << 16) | (lhs << 8) | (rhs);    }
+u32 emit_3_arg_fw(OpCode opcode, Op8 dest, Op8 lhs, Op8 rhs)
+{   return (((dest.mode << 7) | (lhs.mode << 6) | (rhs.mode << 5)  | opcode) << 24) | (dest.val << 16) | (lhs.val << 8) | (rhs.val);   }
 
 //for ops that take 1 8-bit arg, 1 11-bit arg, and 1 5-bit arg
-u32 emit_shift_arg_fw(OpCode opcode, AddrMode dest_m, u8 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u8 rhs)
-{    return (((dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | opcode) << 24) | (dest << 16) | (lhs << 5) | (rhs);    }
+u32 emit_shift_arg_fw(OpCode opcode, Op8 dest, Op11 lhs, Op5 rhs)
+{   return (((dest.mode << 7) | (lhs.mode << 6) | (rhs.mode << 5)  | opcode) << 24) | (dest.val << 16) | (lhs.val << 5) | (rhs.val);   }
+
+#define      ARG0(func_name, opcode) u32 func_name()                     { return     emit_0_arg_fw(opcode); }
+#define      ARG1(func_name, opcode) u32 func_name(Op24 a)               { return     emit_1_arg_fw(opcode, a); }
+#define      ARG2(func_name, opcode) u32 func_name(Op8 a, Op16 b)        { return     emit_2_arg_fw(opcode, a, b); }
+#define      ARG3(func_name, opcode) u32 func_name(Op8 a, Op8  b, Op8 c) { return     emit_3_arg_fw(opcode, a, b, c); }
+#define ARG_SHIFT(func_name, opcode) u32 func_name(Op8 a, Op11 b, Op5 c) { return emit_shift_arg_fw(opcode, a, b, c); }
+
+#define emit_func(func_name, opcode, format) \
+    format(func_name, opcode)
 
 //EMITTERS
 
@@ -38,7 +57,7 @@ u32 emit_shift_arg_fw(OpCode opcode, AddrMode dest_m, u8 dest, AddrMode lh_m, u3
 
 //basics
 void nop_vw()
-{    RAM[next_word++] = OP_NOP;    }
+{   RAM[next_word++] = OP_NOP;   }
 
 //todo add addr mode like in fw
 void inc_vw(u32 addr)
@@ -97,7 +116,7 @@ void sub_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u3
 
 void mult_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
 {
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_MULT;
+	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_MUL;
 	RAM[next_word] = i;
 	next_word++;
 	RAM[next_word] = dest;
@@ -123,22 +142,22 @@ void div_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u3
 
 //logic/bitwise
 void not_vw(AddrMode dest_m, u32 dest, AddrMode val_m, u32 val)
-{    /*todo*/    }
+{   /*todo*/   }
 
 void and_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{    /*todo*/    }
+{   /*todo*/   }
 
 void or_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{    /*todo*/    }
+{   /*todo*/   }
 
 void xor_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{    /*todo*/    }
+{   /*todo*/   }
 
 void lsl_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{    /*todo*/    }
+{   /*todo*/   }
 
 void rsl_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{    /*todo*/    }
+{   /*todo*/   }
 
 //branch/jump
 u32 jmp_vw(AddrMode dest_m, u32 dest)
@@ -203,74 +222,36 @@ void jgt_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u3
 
 //cpu state
 void halt_vw()
-{    RAM[next_word++] = OP_HALT;    }
+{   RAM[next_word++] = OP_HALT;   }
 
 //Fixed Width
-
+#define f emit_func
 //basics
-u32 nop_fw()
-{    return 0;    }
-
-u32 inc_fw(AddrMode addr_m, u32 addr)
-{    return emit_1_arg_fw(OP_INC, addr_m, addr);    }
-
-u32 dec_fw(AddrMode addr_m, u32 addr)
-{    return emit_1_arg_fw(OP_DEC, addr_m, addr);    }
-
-u32 set_fw(AddrMode dest_m, u8 dest, AddrMode val_m, u32 val) 
-{    return emit_2_arg_fw(OP_SET, dest_m, dest, val_m, val);    }
-
+f(nop_fw, OP_NOP, ARG0);
+f(inc_fw, OP_INC, ARG1);
+f(dec_fw, OP_DEC, ARG1);
+f(set_fw, OP_SET, ARG2);
 //arithmetic
-u32 add_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_ADD, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 sub_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_SUB, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 mult_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_MULT, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 div_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_DIV, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
+f(add_fw, OP_ADD, ARG3);
+f(sub_fw, OP_SUB, ARG3);
+f(mul_fw, OP_MUL, ARG3);
+f(div_fw, OP_DIV, ARG3);
 //logic/bitwise
-u32 not_fw(AddrMode dest_m, u8 dest, AddrMode val_m, u32 val)
-{    return emit_2_arg_fw(OP_NOT, dest_m, dest, val_m, val);    }
-
-u32 and_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_AND, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 or_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_OR, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 xor_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_XOR, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 lsl_fw(AddrMode dest_m, u32 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_shift_arg_fw(OP_LSL, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 rsl_fw(AddrMode dest_m, u32 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_shift_arg_fw(OP_RSL, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
+f(not_fw, OP_NOT, ARG2);
+f(and_fw, OP_AND, ARG3);
+f(ior_fw, OP_IOR, ARG3);
+f(xor_fw, OP_XOR, ARG3);
+f(lsl_fw, OP_LSL, ARG_SHIFT);
+f(rsl_fw, OP_RSL, ARG_SHIFT);
 //branch/jump
-u32 jmp_fw(AddrMode dest_m, u32 dest)
-{    return emit_1_arg_fw(OP_JMP, dest_m, dest);    }
-
-u32 jeq_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_JEQ, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 jne_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_JNE, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 jlt_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_JLT, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
-u32 jgt_fw(AddrMode dest_m, u8 dest, AddrMode lh_m, u8 lhs, AddrMode rh_m, u8 rhs)
-{    return emit_3_arg_fw(OP_JGT, dest_m, dest, lh_m, lhs, rh_m, rhs);    }
-
+f(jmp_fw, OP_JMP, ARG1);
+f(jeq_fw, OP_JEQ, ARG3);
+f(jne_fw, OP_JNE, ARG3);
+f(jlt_fw, OP_JLT, ARG3);
+f(jgt_fw, OP_JGT, ARG3);
 //cpu state
-u32 halt_fw()
-{    return OP_HALT << 24;    }
+f(halt_fw, OP_HALT, ARG0);
+#undef f
 
 typedef struct
 {
@@ -286,7 +267,6 @@ void label(char *name)
 	//check for unresolved entry
 	for (int i = 0; i < unresolved_labels.count;)
 	{
-		printf("RESOLVE! %s %d %d\n",unresolved_labels.keys[i], unresolved_labels.keys[i], unresolved_labels.vals[i]);
 		if(unresolved_labels.keys[i] == name)
 		{
 			RAM[unresolved_labels.vals[i]] = next_word;

@@ -2,43 +2,11 @@
 #include <math.h>
 
 bool button_down(GamePad pad, ButtonName button_name)
-{
-	return (pad.buttons & button_name) != 0;
-}
+{   return (pad.buttons & button_name) != 0;   }
 
 #define pad0 (mem.game_pads[0])
 bool ButtonDown(ButtonName button_name)
-{
-	return button_down(pad0, button_name);
-}
-
-print_gamepad(int pad)
-{
-	printf(
-		"pad %d:\n{\n UP: %d\nDOWN: %d\nLEFT: %d\nRIGHT: %d\nA: %d\nB: %d\nX: %d\nY: %d\nSELECT: %d\nSTART: %d\nL1: %d\nR1: %d\nL2: %d\nR2: %d\nL3: %d\nR3:%d\nleft_stick:{ x: %d, y: %d }\nright_stick:{ x: %d, y: %d }}\n\n",
-		pad,
-		ButtonDown(UP),
-		ButtonDown(DOWN),
-		ButtonDown(LEFT),
-		ButtonDown(RIGHT),
-		ButtonDown(A),
-		ButtonDown(B),
-		ButtonDown(X),
-		ButtonDown(Y),
-		ButtonDown(SELECT),
-		ButtonDown(START),
-		ButtonDown(L1),
-		ButtonDown(R1),
-		ButtonDown(L2),
-		ButtonDown(R2),
-		ButtonDown(L3),
-		ButtonDown(R3),
-		mem.game_pads[pad].sticks.left_stick.X,
-		mem.game_pads[pad].sticks.left_stick.Y,
-		mem.game_pads[pad].sticks.right_stick.X,
-		mem.game_pads[pad].sticks.right_stick.Y
-	);
-}
+{   return button_down(pad0, button_name);   }
 
 typedef struct
 {
@@ -54,82 +22,61 @@ typedef struct
 
 #define sprite_size 22
 typedef struct
-{
-	Color pixels[sprite_size*sprite_size];
-} Sprite;
-
-
+{   Color pixels[sprite_size*sprite_size];   }
+Sprite;
 
 int clamp_int(int val, int min, int max)
-{
-	return (val < min) ? min : ((val > max) ? max : val);
-}
+{   return (val < min) ? min : ((val > max) ? max : val);   }
 
 void clamp_float(float *val, int min, int max)
-{
-	*val = (*val < min) ? min : ((*val > max) ? max : *val);
-}
+{   *val = (*val < min) ? min : ((*val > max) ? max : *val);   }
 
+#define INCLUDE_EDITORS 1
 typedef enum
 {
 	Field,
-	MeshTest,
-	Face,
 	SplashScreen,
 	TitleScreen,
 	FileSelect,
 	Dungeon,
 	Paused,
+#if INCLUDE_EDITORS
+	MeshTest,
+	Face,
+	TerrainEditor,
+#endif
 	scene_count,
 } GameState;
 
 typedef struct
-{
-	int x, y;
-} v2i;
+{   int x, y;   } 
+v2i;
 
 float v2i_mag(v2i v)
-{
-	return (float)sqrt(v.x * v.x + v.y * v.y);
-}
+{   return (float)sqrt(v.x * v.x + v.y * v.y);   }
 
 v2i v2i_sub(v2i a, v2i b)
-{
-	return (v2i){ a.x - b.x, a.y - b.y};
-}
+{   return (v2i){ a.x - b.x, a.y - b.y};   }
 
 float v2i_dist(v2i a, v2i b)
 {    return v2i_mag(v2i_sub(a,b));    }
 
 float v2_mag(v2 v)
-{
-	return (float)sqrt(v.x * v.x + v.y * v.y);
-}
+{   return (float)sqrt(v.x * v.x + v.y * v.y);   }
 
 v2 v2_sub(v2 a, v2 b)
-{
-	return (v2){ a.x - b.x, a.y - b.y};
-}
+{   return (v2){ a.x - b.x, a.y - b.y};   }
 
 float v2_dist(v2 a, v2 b)
 {    return v2_mag(v2_sub(a,b));    }
 
+typedef struct
+{   int x, y, width, height;   }
+Rect;
 
 typedef struct
-{
-	int x, y, width, height;
-} Rect;
-
-typedef struct
-{
-	float 
-	left, 
-	bottom, 
-	back,
-	right, 
-	top, 
-	front; 
-} Cube;
+{   float left, bottom, back, right, top, front;   }
+Cube;
 
 bool cube_intersect(Cube a, Cube b)
 {
@@ -143,69 +90,59 @@ bool cube_intersect(Cube a, Cube b)
 }
 
 typedef struct
-{
-	float x,y,z;
-} v3;
+{   float x, y, z;   }
+v3;
+
 #define v3_zero ((v3){0, 0, 0})
 #define v3_forward ((v3){0, 0, 1})
-typedef struct
-{
-	v3 position;
-	v3 rotation;
-	v3 scale;
-} Transform;
 
 typedef struct
-{
-	v3 a, b, c;
-}
+{   v3 position, rotation, scale;   }
+Transform;
+
+typedef struct
+{   v3 a, b, c;   }
 Triangle;
 
 v3 v3_add(v3 a, v3 b)
-{    return (v3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
+{   return (v3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
 
 v3 v3_sub(v3 a, v3 b)
-{    return (v3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
+{   return (v3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
 
 v3 v3_mult(v3 a, v3 b)
-{    return (v3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
+{   return (v3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
 
 v3 v3_scale(v3 v, float s)
-{    return (v3){ v.x*s, v.y*s, v.z*s }; }
+{   return (v3){ v.x*s, v.y*s, v.z*s }; }
 
 v3 v3_div(v3 v, float s)
-{    return (v3){ v.x/s, v.y/s, v.z/s }; }
+{   return (v3){ v.x/s, v.y/s, v.z/s }; }
 
 float v3_mag(v3 v)
-{    return sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
+{   return sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
 
 v3 v3_normalized(v3 v)
-{    return v3_div(v, v3_mag(v)); }
+{   return v3_div(v, v3_mag(v)); }
 
 float v3_dist(v3 a, v3 b)
-{    return v3_mag(v3_sub(a, b)); }
+{   return v3_mag(v3_sub(a, b)); }
 
 float v3_dot(v3 a, v3 b)
-{    return a.x*b.x + a.y*b.y + a.z*b.z; }
+{   return a.x*b.x + a.y*b.y + a.z*b.z; }
 
 float v3_project(v3 a, v3 b)
-{    return v3_dot(a,b)/v3_mag(b); }
+{   return v3_dot(a,b)/v3_mag(b); }
 
 v3 v3_rotate_yz_plane(v3 v, float t)
-{
-	return (v3){v.x,(sin(t)*v.z)+(cos(t)*v.y), (cos(t)*v.z)-(sin(t)*v.y)};
-}
+{   return (v3){ v.x, (sin(t)*v.z)+(cos(t)*v.y), (cos(t)*v.z)-(sin(t)*v.y) };   }
 
 v3 v3_rotate_xz_plane(v3 v, float t)
-{
-	return (v3){cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z};
-}
+{   return (v3){ cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z };   }
 
 
 v3 v3_rotate_xy_plane(v3 v, float t)
-{
-	return (v3){-((-cos(t))*v.x-sin(t)*v.y), ((-sin(t))*v.x+cos(t)*v.y), v.z};
-}
+{   return (v3){ -((-cos(t))*v.x-sin(t)*v.y), ((-sin(t))*v.x+cos(t)*v.y), v.z };   }
 
 typedef struct
 {
@@ -245,6 +182,7 @@ v3 to_barycentric(Triangle tri, v2i cartesian)
 	bary.y = p.y*cart.x+q.y*cart.y;
 	bary.z = 1-(bary.x+bary.y);
 
+	//correct for floating-point error
 	float tol = .000001f;
 	if(bary.x  < 0 && bary.x >= -tol)
 		bary.x = 0;
@@ -266,6 +204,7 @@ v3 to_barycentric_quick(v2 origin, v2 p, v2 q, v2 cart)
 	bary.y = p.y*cart.x+q.y*cart.y;
 	bary.z = 1-(bary.x+bary.y);
 
+	//correct for floating-point error
 	float tol = .000001f;
 	if(bary.x  < 0 && bary.x >= -tol)
 		bary.x = 0;
@@ -288,32 +227,19 @@ typedef struct
 	int pixel_index;
 	v3 bary;
 }
-RasterEntry;
+Fragment;
 
 typedef struct
 {
 	int entry_count;
-	RasterEntry entries[10000];//todo deal with allocation
-} RasterList;
+	Fragment entries[10000];//todo deal with allocation
+} FragmentList;
 
 int min_3(int a, int b, int c)
-{
-	int res = a;
-	if(b < res)
-		res = b;
-	if(c < res)
-		res = c;
-	return res;
-}
+{   int res = a; if(b < res) res = b; if(c < res) res = c; return res;   }
+
 int max_3(int a, int b, int c)
-{
-	int res = a;
-	if(b > res)
-		res = b;
-	if(c > res)
-		res = c;
-	return res;
-}
+{   int res = a; if(b > res) res = b; if(c > res) res = c; return res;   }
 
 typedef enum
 {
@@ -340,7 +266,6 @@ typedef enum
 {
 	Bomb,
 	Boomerang,
-
 } ItemType;
 
 typedef struct Entity
@@ -409,26 +334,29 @@ typedef struct
 
 float z_buffer[vm_width*vm_height];
 
+clear_z_buffer()
+{
+	for (int i = 0; i < vm_width*vm_height; ++i)
+		z_buffer[i] = -1000;
+}
+
 GameStatus *g = (GameStatus *)&mem.RAM[start_address];
 
 void delete_entity(int i)
-{
-	g->entities[i] = g->entities[--g->entity_count];
-}
+{   g->entities[i] = g->entities[--g->entity_count];   }
+
 #define cur_tex (g->global_texture)
 #define cur_pix (cur_tex.pixels)
+#define cur_size (cur_tex.width*cur_tex.height)
+
+//todo generalize macro for use beyond cur_tex
+#define for_all(x) for(int i = 0; i < cur_size; ++i)
 
 fill(Color col)
-{
-	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
-		cur_pix[i] = col;
-}
+{   for_all(cur_tex) cur_pix[i] = col;   }
 
 clear()
-{
-	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
-		cur_pix[i] = 0;
-}
+{   for_all(cur_tex) cur_pix[i] = 0;   }
 
 fill_rect(Color color, Rect rect)
 {
@@ -522,7 +450,7 @@ draw_tex_t(Texture tex, int x, int y)
 	{
 		Color col = tex.pixels[_y*tex.width+_x];
 		if(col != 0)
-		cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+			cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
 	}
 }
 
@@ -560,9 +488,7 @@ v3 v3_cross(v3 a, v3 b)
 }
 
 Color shade_solid(Triangle tri, void *state)
-{
-	return *((Color*)(state));
-}
+{   return *((Color*)(state));   }
 
 v3 light = {0,0,-1};
 Color flat_shaded(Triangle tri, void *state)
@@ -580,12 +506,6 @@ Color flat_shaded(Triangle tri, void *state)
 	return col;
 }
 
-Color terrain_shader(Triangle tri, void *state)
-{
-	float elevation = centroid(tri).z;
-
-	return ((int)(elevation))<<8;
-}
 typedef struct
 {
 	Shader shader;
@@ -677,10 +597,10 @@ void fill_triangle(Triangle tri, Color col)
 	}	
 }
 
-RasterList triangle_to_rasterlist(Triangle tri)
+FragmentList triangle_to_fragment_list(Triangle tri)
 {
 	//todo bounding box
-	RasterList list = {.entry_count = 0};
+	FragmentList list = {.entry_count = 0};
 	for (int y = 0; y < vm_height; ++y)
 	for (int x = 0; x < vm_width; ++x)
 	{
@@ -689,19 +609,17 @@ RasterList triangle_to_rasterlist(Triangle tri)
 
 		if(bary.x >= 0 && bary.y >= 0 && bary.z >= 0)
 		{
-			list.entries[list.entry_count++] = (RasterEntry){.pixel_index = y*vm_width+x, .bary = bary};
+			list.entries[list.entry_count++] = (Fragment){.pixel_index = y*vm_width+x, .bary = bary};
 		}
 	}
 
 	return list;
 }
 
-fill_rasterlist(RasterList list, Color col)
+fill_fragment_list(FragmentList list, Color col)
 {
 	for (int i = 0; i < list.entry_count; ++i)
-	{
 		mem.frame_buffer.pixels[list.entries[i].pixel_index] = col;
-	}
 }
 
 void outline(Color fill_color, Color detect_color)
@@ -726,9 +644,7 @@ void outline(Color fill_color, Color detect_color)
 }
 
 Transform t_from_v_and_s(v3 v, float s)
-{
-	return (Transform){v.x,v.y,v.z, 0,0,0,s,s,s};
-}
+{   return (Transform){v.x,v.y,v.z, 0,0,0,s,s,s};   }
 
 #define unit_size 16
 void render_rect(Color color, Transform t)
@@ -770,9 +686,9 @@ print_cube(Cube c)
 }
 
 print_v3(char* label, v3 v)
-{
-	printf("%s: { %f, %f, %f }\n", label, v.x, v.y, v.z);
-}
+{   printf("%s: { %f, %f, %f }\n", label, v.x, v.y, v.z);   }
+
+
 u32 mesh_cursor = 0;
 
 typedef struct
@@ -790,10 +706,10 @@ print_triangle(char* label, Triangle t)
 	print_v3("\tb", t.b);
 	print_v3("\tc", t.c);
 }
+
 Entity block(Transform t)
 {
-	return 
-	(Entity)
+	return (Entity)
 	{
 		.entity_type = Block,
 		.transform = t,
@@ -989,9 +905,7 @@ memset_u32_4wide(u32 *p, int value, int count)
 }
 
 float lerp(float a, float b, float t)
-{
-	return a+t*(b-a);
-}
+{   return a+t*(b-a);   }
 
 v3 v3_lerp(v3 a, v3 b, float t)
 {
@@ -1046,9 +960,7 @@ gradient(Color a, Color b, int h)
 }
 
 sky()
-{
-	gradient(0x0055FF, white,100);
-}
+{   gradient(0x0055FF, white,100);   }
 
 mountains()
 {
@@ -1087,9 +999,6 @@ sun()
 	fill_circle2(yellow, (v2){(vm_width/2+cos(3.14159f+g->time/div)*((vm_width-40)/2)),120-sin(g->time/div)*100}, 19.9f, 8);
 }
 
-
-
-
 splash_screen()
 {
 	//todo brushfire logo
@@ -1102,24 +1011,19 @@ splash_screen()
 
 title_screen()
 {
-
 	//draw game logo, press start text fading in and out, sword in stone in background in forest, animated glint on logo text, stretch goal fade to cut scene
 	//draw_text("press start",)
 	g->current_gamestate++;
-
 }
 
 file_select()
-{
-	g->current_gamestate++;
-}
+{   g->current_gamestate++;   }
 
 int vertex_count = 0;
 v3 vertices[20000];
 int index_count;
 int indices[100000];
 int triangle_count = 0;
-Triangle triangles[100000];
 
 
 
@@ -1169,9 +1073,9 @@ Mesh cone(v3 origin, float radius, int height, int divisions)
 
 v3 v3_rotate(v3 v, v3 euler)
 {
-	v = v3_rotate_yz_plane(v,euler.x);
-	v = v3_rotate_xz_plane(v,euler.y);
-	v = v3_rotate_xy_plane(v,euler.z);
+	v = v3_rotate_yz_plane(v, euler.x);
+	v = v3_rotate_xz_plane(v, euler.y);
+	v = v3_rotate_xy_plane(v, euler.z);
 	return v;
 }
 
@@ -1187,19 +1091,19 @@ void rot_mesh(Mesh mesh, v3 euler)
 
 v3 transform_point(v3 v, Transform t)
 {
-	v = v3_mult(v,t.scale);
-	v = v3_rotate(v,t.rotation);
+	v = v3_mult(v, t.scale);
+	v = v3_rotate(v, t.rotation);
 	v = v3_add(v, t.position);
 	return v;
 }
 
-render_mesh(Mesh mesh, Material mat, Transform tr)
+render_mesh(Mesh mesh, Material mat, Transform tr, Transform cam)
 {
 	//transform
 	{
 		v3 *v = (v3*)&g->mesh_data[mesh.index];
 		#define v3_one ((v3){1,1,1})
-		Transform cam ={(v3){-16,5,0},(v3){M_PI+.2f,0,0},v3_scale(v3_one,2)};
+		//cam = (Transform){(v3){0,5,0},(v3){M_PI+.2f,0,0},v3_scale(v3_one,2)};
 		for (int i = 0; i < mesh.count*3; ++i)
 		{
 			v[i] = transform_point(v[i], tr);
@@ -1227,7 +1131,6 @@ render_mesh(Mesh mesh, Material mat, Transform tr)
 
 field()
 {
-
 	v3 forward;
 	v3 right;
 	v3 hand;
@@ -1483,10 +1386,7 @@ field()
 
 	//render
 	{
-		for (int i = 0; i < vm_width*vm_height; ++i)
-		{
-			z_buffer[i] = -1000;
-		}
+		clear_z_buffer();
 		//scene
 		if(g->render_scene)
 		{
@@ -1496,11 +1396,11 @@ field()
 				sun();
 				mountains();
 				//draw_terrain();
-				render_mesh(terrain_mesh, (Material){flat_shaded},default_transform);
+				render_mesh(terrain_mesh, (Material){flat_shaded},default_transform,default_transform);
 				Color col = green;
 				Transform tr = default_transform;
 				tr.position = player.transform.position;
-				render_mesh(test_mesh, (Material){shade_solid,&col},tr);		
+				render_mesh(test_mesh, (Material){shade_solid,&col},tr, default_transform);
 			}
 
 			for (int i = 0; i < g->entity_count; ++i)
@@ -1617,7 +1517,7 @@ field()
 
 dungeon()
 {
-
+	g->current_gamestate++;
 }
 
 paused()
@@ -1630,6 +1530,8 @@ paused()
 
 }
 
+
+#if INCLUDE_EDITORS
 eye(v2 eye_pos)
 {
 	fill_circle2(0xFF555555, eye_pos, 15.5f, .8f);	
@@ -1643,10 +1545,7 @@ eye(v2 eye_pos)
 face()
 {
 	v2 eye_pos = {82,40};
-	for (int i = 0; i < cur_tex.width*cur_tex.height; ++i)
-	{
-		cur_pix[i] = 0;
-	}
+	clear();
 	
 	fill_circle2(0xFFFFCCAA,(v2){100,41}, 38.5f, 2);
 	
@@ -1665,16 +1564,11 @@ face()
 	fill_rect(black,(Rect){65+42,31,30,4});
 }
 
-
-
-
 void mesh_test()
 {
 	clear();
-	for (int i = 0; i < vm_width*vm_height; ++i)
-	{
-		z_buffer[i] = -1000;
-	}
+	clear_z_buffer();
+
 	static int foo = 8;
 	static float t =0;
 	t+=g->delta_time;
@@ -1692,7 +1586,7 @@ void mesh_test()
 
 	fleep+=g->delta_time;
 	cylinder_cap.count+=cylinder_cap2.count;
-	render_mesh(cylinder_cap, (Material){flat_shaded},(Transform){cos(fleep),0,0,0,0,fleep,1,4,1});
+	render_mesh(cylinder_cap, (Material){flat_shaded},(Transform){cos(fleep),0,0,0,0,fleep,1,4,1},default_transform);
 	if(GetAsyncKeyState('F'))
 	for (int i = 0; i < vm_width*vm_height; ++i)
 	{
@@ -1709,16 +1603,51 @@ void mesh_test()
 	mesh_cursor = 0;
 }
 
+void terrain_editor()
+{
+	fill(0x88);
+	clear_z_buffer();
+
+	static float scale = 1;
+	if(GetAsyncKeyState(VK_SPACE))
+		scale*=1.01f;
+	terrain_mesh = generate_terrain(scale,scale,20,20);
+	mesh_cursor = 0;
+
+	if(GetAsyncKeyState(VK_DOWN))
+	{
+		g->camera.position.z -= g->delta_time;
+	}
+	if(GetAsyncKeyState(VK_UP))
+	{
+		g->camera.position.z += g->delta_time;
+	}
+	if(GetAsyncKeyState(VK_LEFT))
+	{
+		g->camera.position.x -= g->delta_time;
+	}
+	if(GetAsyncKeyState(VK_RIGHT))
+	{
+		g->camera.position.x += g->delta_time;
+	}
+	render_mesh(terrain_mesh, (Material){flat_shaded}, default_transform, g->camera);
+
+}
+#endif
+
 void (*scenes[scene_count])(void) = 
 {
-	[MeshTest] = &mesh_test,
-	[Face] = &face,
 	[SplashScreen] = &splash_screen,
 	[TitleScreen] = &title_screen,
 	[FileSelect] = &file_select,
 	[Dungeon] = &dungeon,
 	[Field] = &field,
 	[Paused] = &paused,
+#if INCLUDE_EDITORS
+	[MeshTest] = &mesh_test,
+	[Face] = &face,
+	[TerrainEditor] = &terrain_editor
+#endif
 };
 
 void _tick()
@@ -1747,7 +1676,6 @@ Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z
 	int verts_deep = subdivs_z+1;
 	vertex_count = (verts_wide)*(verts_deep);
 	index_count = 6*subdivs_x*subdivs_z;
-
 
 	//todo delete this
 	float t = 2.5f;

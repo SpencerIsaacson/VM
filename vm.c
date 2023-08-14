@@ -3,6 +3,7 @@
 
 typedef unsigned char byte;
 typedef unsigned char u8;
+typedef unsigned short u16;
 typedef signed int s32;
 typedef unsigned int u32;
 typedef signed long long s64;
@@ -76,12 +77,12 @@ typedef enum OpCode
 	//arithmetic
 	OP_ADD,
 	OP_SUB,
-	OP_MULT,
+	OP_MUL,
 	OP_DIV,
 	//logic/bitwise
 	OP_NOT,
 	OP_AND,
-	OP_OR,
+	OP_IOR,
 	OP_XOR,
 	OP_LSL,
 	OP_RSL,
@@ -179,7 +180,7 @@ void tick()
 				//printf("set %c%d, %c%d\n", a_mode(op)? '@' : ' ', RAM[PC+1], b_mode(op)? '@' : ' ', RAM[PC+2]);
 				NPC+=2;	
 			} break;
-			case OP_MULT:
+			case OP_MUL:
 			{
 				u32 *a;
 				u32 *b;	
@@ -368,7 +369,7 @@ void execute(int count, u32 ops[])
 					decode_3_arg(op, opcode);
 					RAM[arg1] = arg2-arg3;
 					break;
-				case OP_MULT:
+				case OP_MUL:
 					//decode_3_arg(op, opcode);
 					RAM[arg1] = arg2*arg3;
 					break;
@@ -387,7 +388,7 @@ void execute(int count, u32 ops[])
 					decode_3_arg(op, opcode);
 					RAM[arg1] = arg2 & arg3;
 					break;							
-				case OP_OR:
+				case OP_IOR:
 					decode_3_arg(op, opcode);
 					RAM[arg1] = arg2 | arg3;
 					break;				

@@ -13,21 +13,30 @@ static bool window_is_open = true;
 int scale_factor = 1;
 #define mem humidor.memory
 
+void queue_sound(u32 sample_count, s32 *samples)
+{
+#if DEBUG
+	for (int i = 0; i < sample_count; ++i)
+	{
+		int index = (humidor.cpu.sample_cursor+i)%audio_sample_capacity;
+		mem.audio_buffer.samples[index] += samples[i];
+	}
+#endif
+}
+
 void fill_audio(void *udata, Uint8 *stream, int len)
 {
 	int *foo = (int *)stream;
 	for(int i = 0; i < len/4; i++, humidor.cpu.sample_cursor++)
 	{
+		if(humidor.cpu.sample_cursor == audio_sample_capacity)
+			humidor.cpu.sample_cursor = 0;
 		foo[i] = mem.audio_buffer.samples[humidor.cpu.sample_cursor];
 		mem.audio_buffer.samples[humidor.cpu.sample_cursor] = 0;
-		if(humidor.cpu.sample_cursor == audio_sample_capacity)
-		{
-			humidor.cpu.sample_cursor = 0;
-		}
 	}
 }
 
-#include "zelda/zelda.h"
+//#include "zelda/zelda.h"
 
 void main(int argc, char **argv)
 {
@@ -49,6 +58,7 @@ void main(int argc, char **argv)
 	}
 
 	reset();
+	
 	//load rom
 	{
 		FILE *file = fopen("assembly.bin", "rb");
@@ -59,7 +69,11 @@ void main(int argc, char **argv)
 		fclose(file);
 	}
 
-	init();
+	//#include "foo.test.c"
+
+	
+
+	//init();
 	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK | SDL_INIT_AUDIO);
 
     //Load Joysticks
@@ -104,10 +118,10 @@ void main(int argc, char **argv)
     {
     	if(GetAsyncKeyState(VK_ESCAPE))
     		return;
-		if(GetAsyncKeyState('R'))
-		{
-			init();
-		}
+		// if(GetAsyncKeyState('R'))
+		// {
+		// 	init();
+		// }
         SDL_Event event;
         while (SDL_PollEvent(&event)) 
         {
@@ -194,59 +208,62 @@ void main(int argc, char **argv)
 			}
 		}
 
-		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-		diff = ((cur - prev) * 1000000) / freq;
-		unsigned int microseconds = (unsigned int)(diff & 0xffffffff);
-		g->delta_time = microseconds/1000000.0f;
-		_tick();
-		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
-    	SDL_UpdateWindowSurface(window);
-		prev = cur;
-#if DEBUG
-		static float t;
-		t+=g->delta_time;
-		if(t > 1)
-		{
-			printf("microseconds last frame: %d\n", microseconds); //once a second, print the microseconds the previous frame took to process
-			t=0;
+// 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+// 		diff = ((cur - prev) * 1000000) / freq;
+// 		unsigned int microseconds = (unsigned int)(diff & 0xffffffff);
+// 		g->delta_time = microseconds/1000000.0f;
+// 		_tick();
+// 		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
+//     	SDL_UpdateWindowSurface(window);
+// 		prev = cur;
+// #if DEBUG
+// 		static float t;
+// 		t+=g->delta_time;
+// 		if(t > 1)
+// 		{
+// 			printf("microseconds last frame: %d\n", microseconds); //once a second, print the microseconds the previous frame took to process
+// 			t=0;
 
-		}
-#endif
-
+// 		}
+// #endif
 		//Sleep(500);
-// #define clock_rate 100000000
-// #define tick_count 100
-// #define interval 1000000/clock_rate*tick_count
-// 		u32 microseconds;
-// 		static u32 micros2;
-// 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-//     	diff = ((cur - prev) * 1000000) / freq;
-//     	microseconds = (u32)(diff & 0xffffffff);
-//     	micros2 += microseconds;
+#define clock_rate 100000000
+#define tick_count 100
+#define interval 1000000/clock_rate*tick_count
+		u32 microseconds;
+		static u32 micros2;
+		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+    	diff = ((cur - prev) * 1000000) / freq;
+    	microseconds = (u32)(diff & 0xffffffff);
+    	micros2 += microseconds;
 
-//     	if(micros2 > interval)
-//     	{
+    	if(micros2 > interval)
+    	{
 
-// 	    	for (int i = 0; i < tick_count; ++i)
-// 	    	{
-// 	    		tick();
-// 	    	}
-// 	    	micros2=0;
-//     	}
+	    	for (int i = 0; i < tick_count; ++i)
+	    	{
+	    		tick();
+	    	}
+	    	micros2=0;
+    	}
 
-// 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-//     	diff = ((cur - prev) * 1000000) / freq;
-//     	microseconds = (u32)(diff & 0xffffffff);
-//     	micros += microseconds;
+		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
+    	diff = ((cur - prev) * 1000000) / freq;
+    	microseconds = (u32)(diff & 0xffffffff);
+    	micros += microseconds;
 
-//     	//todo replace with interrupt
-//     	if(micros >= 16667)
-//     	{
-// 			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
-// 	    	SDL_UpdateWindowSurface(window);
-// 	    	micros = 0;
-//     	}
+    	//todo replace with interrupt
+    	if(micros >= 16667)
+    	{
+			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
+#if DEBUG
+			profile(SDL_UpdateWindowSurface(window), "screen do");
+#else
+			SDL_UpdateWindowSurface(window);
+#endif
+	    	micros = 0;
+    	}
 
-// 		QueryPerformanceCounter((LARGE_INTEGER*)&prev);
+		QueryPerformanceCounter((LARGE_INTEGER*)&prev);
     }
  }	

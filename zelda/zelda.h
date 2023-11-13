@@ -5,14 +5,7 @@ bool button_down(GamePad pad, ButtonName button_name)
 {   return (pad.buttons & button_name) != 0;   }
 
 #define pad0 (mem.game_pads[0])
-bool ButtonDown(ButtonName button_name)
-{   return button_down(pad0, button_name);   }
-
-typedef struct
-{
-	u32 width, height;
-	Color pixels[0];
-} InlineTexture;
+#define ButtonDown(button_name) button_down(pad0, button_name)
 
 typedef struct
 {
@@ -31,12 +24,11 @@ int clamp_int(int val, int min, int max)
 void clamp_float(float *val, int min, int max)
 {   *val = (*val < min) ? min : ((*val > max) ? max : *val);   }
 
-#define INCLUDE_EDITORS 1
 typedef enum
 {
+	TitleScreen,
 	Field,
 	SplashScreen,
-	TitleScreen,
 	FileSelect,
 	Dungeon,
 	Paused,
@@ -52,23 +44,12 @@ typedef struct
 {   int x, y;   } 
 v2i;
 
-float v2i_mag(v2i v)
-{   return (float)sqrt(v.x * v.x + v.y * v.y);   }
-
-v2i v2i_sub(v2i a, v2i b)
-{   return (v2i){ a.x - b.x, a.y - b.y};   }
-
-float v2i_dist(v2i a, v2i b)
-{    return v2i_mag(v2i_sub(a,b));    }
-
-float v2_mag(v2 v)
-{   return (float)sqrt(v.x * v.x + v.y * v.y);   }
-
-v2 v2_sub(v2 a, v2 b)
-{   return (v2){ a.x - b.x, a.y - b.y};   }
-
-float v2_dist(v2 a, v2 b)
-{    return v2_mag(v2_sub(a,b));    }
+float v2i_mag(v2i v)         { return (float)sqrt(v.x * v.x + v.y * v.y); }
+v2i   v2i_sub(v2i a, v2i b)  { return (v2i){ a.x - b.x, a.y - b.y}; }
+float v2i_dist(v2i a, v2i b) { return v2i_mag(v2i_sub(a,b)); }
+float v2_mag(v2 v)           { return (float)sqrt(v.x * v.x + v.y * v.y); }
+v2    v2_sub(v2 a, v2 b)     { return (v2){ a.x - b.x, a.y - b.y}; }
+float v2_dist(v2 a, v2 b)    { return v2_mag(v2_sub(a,b)); }
 
 typedef struct
 {   int x, y, width, height;   }
@@ -94,7 +75,7 @@ typedef struct
 v3;
 
 #define v3_zero ((v3){0, 0, 0})
-#define v3_forward ((v3){0, 0, 1})
+#define v3_forward {0, 0, 1}
 
 typedef struct
 {   v3 position, rotation, scale;   }
@@ -104,57 +85,19 @@ typedef struct
 {   v3 a, b, c;   }
 Triangle;
 
-v3 v3_add(v3 a, v3 b)
-{   return (v3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
-
-v3 v3_sub(v3 a, v3 b)
-{   return (v3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
-
-v3 v3_mult(v3 a, v3 b)
-{   return (v3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
-
-v3 v3_scale(v3 v, float s)
-{   return (v3){ v.x*s, v.y*s, v.z*s }; }
-
-v3 v3_div(v3 v, float s)
-{   return (v3){ v.x/s, v.y/s, v.z/s }; }
-
-float v3_mag(v3 v)
-{   return sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
-
-v3 v3_normalized(v3 v)
-{   return v3_div(v, v3_mag(v)); }
-
-float v3_dist(v3 a, v3 b)
-{   return v3_mag(v3_sub(a, b)); }
-
-float v3_dot(v3 a, v3 b)
-{   return a.x*b.x + a.y*b.y + a.z*b.z; }
-
-float v3_project(v3 a, v3 b)
-{   return v3_dot(a,b)/v3_mag(b); }
-
-v3 v3_rotate_yz_plane(v3 v, float t)
-{   return (v3){ v.x, (sin(t)*v.z)+(cos(t)*v.y), (cos(t)*v.z)-(sin(t)*v.y) };   }
-
-v3 v3_rotate_xz_plane(v3 v, float t)
-{   return (v3){ cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z };   }
-
-
-v3 v3_rotate_xy_plane(v3 v, float t)
-{   return (v3){ -((-cos(t))*v.x-sin(t)*v.y), ((-sin(t))*v.x+cos(t)*v.y), v.z };   }
-
-typedef struct
-{
-	int vertex;
-	v3 offset;
-} Displacement;
-
-typedef struct
-{
-	int disp_count;
-	Displacement *disps;	
-} MorphTarget;
+v3 v3_add(v3 a, v3 b)                { return (v3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
+v3 v3_sub(v3 a, v3 b)                { return (v3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
+v3 v3_mult(v3 a, v3 b)               { return (v3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
+v3 v3_scale(v3 v, float s)           { return (v3){ v.x*s, v.y*s, v.z*s }; }
+v3 v3_div(v3 v, float s)             { return (v3){ v.x/s, v.y/s, v.z/s }; }
+float v3_mag(v3 v)                   { return sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
+v3 v3_normalized(v3 v)               { return v3_div(v, v3_mag(v)); }
+float v3_dist(v3 a, v3 b)            { return v3_mag(v3_sub(a, b)); }
+float v3_dot(v3 a, v3 b)             { return a.x*b.x + a.y*b.y + a.z*b.z; }
+float v3_project(v3 a, v3 b)         { return v3_dot(a,b)/v3_mag(b); }
+v3 v3_rotate_yz_plane(v3 v, float t) { return (v3){ v.x, (sin(t)*v.z)+(cos(t)*v.y), (cos(t)*v.z)-(sin(t)*v.y) }; }
+v3 v3_rotate_xz_plane(v3 v, float t) { return (v3){ cos(t)*v.x-sin(t)*v.z, v.y, sin(t)*v.x+cos(t)*v.z }; }
+v3 v3_rotate_xy_plane(v3 v, float t) { return (v3){ -((-cos(t))*v.x-sin(t)*v.y), ((-sin(t))*v.x+cos(t)*v.y), v.z }; }
 
 //returns the screen space barycentric point represented by a cartesian coordinate and the associated triangle
 v3 to_barycentric(Triangle tri, v2i cartesian)
@@ -235,11 +178,8 @@ typedef struct
 	Fragment entries[10000];//todo deal with allocation
 } FragmentList;
 
-int min_3(int a, int b, int c)
-{   int res = a; if(b < res) res = b; if(c < res) res = c; return res;   }
-
-int max_3(int a, int b, int c)
-{   int res = a; if(b > res) res = b; if(c > res) res = c; return res;   }
+int min_3(int a, int b, int c) { int res = a; if(b < res) res = b; if(c < res) res = c; return res; }
+int max_3(int a, int b, int c) { int res = a; if(b > res) res = b; if(c > res) res = c; return res; }
 
 typedef enum
 {
@@ -303,10 +243,14 @@ typedef struct
 	int zero_page[256];
 	int cur_health;
 	int max_health;
+	int target_health;
+	float t;
 	int cur_magic;
 	int max_magic;
 	int cur_rupees;
 	int max_rupees;
+	float damage_cooldown;
+	bool first;
 	#define max_entitites 400
 	int entity_count;
 	Entity entities[max_entitites];
@@ -328,6 +272,7 @@ typedef struct
 	bool draw_hud;
 	bool draw_camera_gizmo;
 	bool render_scene;
+	bool is_3D;
 	Triangle mesh_data[20000];
 	Color texture_data[100*100];
 } GameStatus;
@@ -352,11 +297,8 @@ void delete_entity(int i)
 //todo generalize macro for use beyond cur_tex
 #define for_all(x) for(int i = 0; i < cur_size; ++i)
 
-fill(Color col)
-{   for_all(cur_tex) cur_pix[i] = col;   }
-
-clear()
-{   for_all(cur_tex) cur_pix[i] = 0;   }
+fill(Color col) { for_all(cur_tex) cur_pix[i] = col; }
+#define clear() fill(0)
 
 fill_rect(Color color, Rect rect)
 {
@@ -456,12 +398,16 @@ draw_tex_t(Texture tex, int x, int y)
 
 draw_sprite_t(Sprite s, int x, int y)
 {
-	for (int _x = 0; _x < sprite_size; ++_x)
 	for (int _y = 0; _y < sprite_size; ++_y)
+	for (int _x = 0; _x < sprite_size; ++_x)
 	{
-		Color col = s.pixels[_y*sprite_size+_x];
-		if(col != 0)
-			cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+		if(((x+_x) >= 0) && ((x+_x) < cur_tex.width))
+		if(((y+_y) >= 0) && ((y+_y) < cur_tex.height))
+		{
+			Color col = s.pixels[_y*sprite_size+_x];
+			if(col != 0)
+				cur_pix[(y+_y)*cur_tex.width+(x+_x)] = col;
+		}
 	}
 }
 
@@ -646,6 +592,8 @@ void outline(Color fill_color, Color detect_color)
 Transform t_from_v_and_s(v3 v, float s)
 {   return (Transform){v.x,v.y,v.z, 0,0,0,s,s,s};   }
 
+#define player (g->entities[0])
+#define player_pos player.transform.position
 #define unit_size 16
 void render_rect(Color color, Transform t)
 {
@@ -653,11 +601,24 @@ void render_rect(Color color, Transform t)
 	int height = unit_size*t.scale.z;
 	int half_width = width/2;
 	int half_height = height/2;
+	int x = (int)((vm_width/2-half_width+(int)(t.position.x*unit_size)) - (int)(player_pos.x*unit_size));
+	int z = (int)((vm_height/2-half_height-(int)(t.position.z*unit_size)) + (int)(player_pos.z*unit_size));
 	fill_rect(color, (Rect){
-		vm_width/2-half_width+(t.position.x)*unit_size,
-		vm_height/2-half_height-(t.position.z)*unit_size,
+		x,
+		z,
 		width,
 		height});
+}
+
+void render_sprite_t(Sprite s, Transform t)
+{
+	int width = unit_size*t.scale.x;
+	int height = unit_size*t.scale.z;
+	int half_width = width/2;
+	int half_height = height/2;
+	int x = (int)((vm_width/2-half_width+(int)(t.position.x*unit_size)) - (int)(player_pos.x*unit_size))-(sprite_size/2-half_width);
+	int z = (int)((vm_height/2-half_height-(int)(t.position.z*unit_size)) + (int)(player_pos.z*unit_size))-(sprite_size/2-half_height);
+	draw_sprite_t(s, x, z);
 }
 
 Cube transform_to_cube(Transform t)
@@ -713,8 +674,8 @@ Entity block(Transform t)
 	{
 		.entity_type = Block,
 		.transform = t,
-		//.do_draw_rect = true,
-		//.color = 0xAAAAAA,
+		.do_draw_rect = true,
+		.color = 0xAAAAAA,
 		.solid = true,
 	};
 }
@@ -726,17 +687,28 @@ Entity rupee(v3 position)
 		.entity_type = Pickup,
 		.pickup_type = Rupee,
 		.transform = (Transform){.position = position,0,0,0,.5f,.5f,1},
+		//.do_draw_rect = true,
 		.draw_sprite = true,
-		.color = blue,
+		//.color = blue,
 		.sprite = &g->rupee,
 		.var = 1,
 	};	
 }
 
-#define player (g->entities[0])
+Entity door(v3 position, int var)
+{
+	return (Entity)
+	{
+		.entity_type = Trigger,
+		.transform = (Transform){.position = position,0,0,0,1,1,1},
+		.do_draw_rect = true,
+		.color = magenta,
+		.var = var,
+	};	
+}
+
 #define default_transform ((Transform){0,0,0,0,0,0,1,1,1})
 Mesh generate_terrain(float scale_x, float scale_z, int subdivs_x, int subdivs_z);
-void draw_terrain();
 
 #define screen_texture ((Texture) { vm_width, vm_height, mem.frame_buffer.pixels })
 #define heart_texture ((Texture){sprite_size,sprite_size, g->heart.pixels})
@@ -803,6 +775,24 @@ void regenerate_heart_sprites()
 	cur_tex = screen_texture;
 }
 
+take_damage()
+{
+	if(g->damage_cooldown <= 0){
+		g->cur_health -= 2;
+		g->target_health -= 2;
+		player.color = white;
+		g->damage_cooldown = .5f;
+		if(g->cur_health <= 0){
+			g->first = true;
+			g->current_gamestate = SplashScreen;
+		}
+	}
+
+}
+
+#define samp_cow 20000
+u32 samples[samp_cow];
+
 init()
 {
 	*g = (GameStatus)
@@ -811,34 +801,34 @@ init()
 		.max_health = 40,
 		.cur_magic = 100,
 		.max_magic = 100,
-		.entity_count = 11,
+		.first = true,
+		.entity_count = 21,
 		.entities =
 		{
 			(Entity)
 			{
 				.entity_type = Player,
-				.transform = (Transform){1,0,1,0,0,0,1,1,1},
+				.transform = (Transform){2,0,-9,0,0,0,1,1,1},
 				.do_draw_rect = true,
 				.color = green,
 			},
-			block((Transform){4.5f,0,0,0,0,0,10,1,1}),
+			block((Transform){5.5f,0,0,0,0,0,10,1,1}),
 			block((Transform){0,0,5.5f,0,0,0,1,1,10}),
 			(Entity)
 			{
 				.entity_type = Enemy,
-				.transform = (Transform){ {4,0,-1},.scale = {1,1,1}},
+				.transform = (Transform){ {4,0,-6},.scale = {1,1,1}},
 				.do_draw_rect = true,
 				.color = red,
-				.solid = true,
 			},
 			(Entity)
 			{
 				.entity_type = Pickup,
 				.pickup_type = Heart,
 				.transform = (Transform){4,0,-2,0,0,0,.5f,.5f,.5f},
-				//.do_draw_rect = true,
-				.draw_sprite = true,
-				.sprite = &g->heart,
+				.do_draw_rect = true,
+				//.draw_sprite = true,
+				//.sprite = &g->heart,
 				.color = 0xFFAA00,
 			},
 			(Entity)
@@ -846,18 +836,31 @@ init()
 				.entity_type = Pickup,
 				.pickup_type = HeartContainer,
 				.transform = (Transform){6,0,-3,0,0,0,1,1,1},
-				.do_draw_rect = true,
-				.color = red,
+				//.do_draw_rect = true,
+				.draw_sprite = true,
+				.sprite = &g->heart,
+				//.color = red,
 			},
 			rupee((v3){-2,0,-3}),
 			rupee((v3){-3,0,-3}),
 			rupee((v3){-4,0,-3}),
 			rupee((v3){-5,0,-3}),
-			rupee((v3){-6,0,-3}),										
+			rupee((v3){-6,0,-3}),
+			rupee((v3){-7,0,-3}),
+			rupee((v3){-8,0,-3}),
+			rupee((v3){-9,0,-3}),
+			rupee((v3){-10,0,-3}),
+			rupee((v3){-11,0,-3}),
+			rupee((v3){-12,0,-3}),
+			rupee((v3){-13,0,-3}),
+			rupee((v3){-14,0,-3}),
+			rupee((v3){-15,0,-3}),
+			door((v3){-1,0,2}, Dungeon),
 		},
 		.global_texture = screen_texture,
 		.draw_hud = true,
 		.render_scene = true,
+		.is_3D = false,
 		.draw_camera_gizmo = false,
 		.camera = (Transform){0,0,-1,0,0,0,.2,.2,.2},
 	};
@@ -891,6 +894,15 @@ init()
 
 	terrain_mesh = generate_terrain(16,16,16,16);
 	mesh_cursor = 0;
+
+	float t = 0;
+	float freq = 500;
+	for (int i = 0; i < samp_cow; ++i)
+	{
+		samples[i] = (s32)(sin(t)*(INT_MAX/200));
+		t+=freq;
+		freq+=.001f;
+	}	
 }
 
 memset_u32_4wide(u32 *p, int value, int count)
@@ -906,6 +918,15 @@ memset_u32_4wide(u32 *p, int value, int count)
 
 float lerp(float a, float b, float t)
 {   return a+t*(b-a);   }
+
+v2 v2_lerp(v2 a, v2 b, float t)
+{
+	 return (v2)
+	 {
+	 	lerp(a.x, b.x, t),
+	 	lerp(a.y, b.y, t),
+	 };
+}
 
 v3 v3_lerp(v3 a, v3 b, float t)
 {
@@ -1006,14 +1027,214 @@ splash_screen()
 	//fill_circle(red,(v2i){12,4},4.9f);
 
 	//fade up from black, show brushfire logo, fade to black, transition to title screen
-	g->current_gamestate++;
+	if(g->first)
+	{
+		g->time = 0;
+		fill(black);
+		g->first = false;
+	}
+
+	if(g->time > 4)
+		g->current_gamestate=TitleScreen;
+}
+
+typedef struct {v2 c1, c2, c3, c4; } Bezier;
+typedef struct { int count; v2 *cpoints; } Spline;
+typedef struct { int count; Spline *splines; } Glyph;
+
+v2 sample_bezier(Bezier bz, float t)
+{
+	v2 a = v2_lerp(bz.c1, bz.c2, t);
+	v2 b = v2_lerp(bz.c2, bz.c3, t);
+	v2 c = v2_lerp(bz.c3, bz.c4, t);
+	v2 d = v2_lerp(a, b, t);
+	v2 e = v2_lerp(b, c, t);
+	v2 f = v2_lerp(d, e, t);
+	return f;
+}
+
+void stroke_spline(Spline s)
+{
+	#define bez_count 400
+	int c_cursor = 0;
+	Bezier bz;
+	while((c_cursor+3) < s.count)
+	{
+		bz = *((Bezier*)(&s.cpoints[c_cursor]));
+		for (int i = 0; i < bez_count; ++i)
+		{
+			v2 sample = sample_bezier(bz, (i)/(float)(bez_count-1));
+			fill_rect(green, (Rect){ sample.x, sample.y, 1, 1});
+		}
+		c_cursor+=3;
+	}
+}
+
+#define countof(n) sizeof(n)/sizeof(n[0])
+void fill_stroke()
+{
+	for (int y = 0; y < vm_height; ++y)
+	{
+		int least = vm_width;
+		int most = 0;
+		for (int x = 0; x < vm_width; ++x)
+		{
+			if(cur_pix[y*vm_width+x] == green)
+			{
+				if(x < least)
+				{
+					least = x;
+				}
+				most = x;
+			}
+		}
+
+		int total_crosses = 0;
+		int crosses = 0;
+		for (int x = least; x < most; ++x)
+		{
+			if(cur_pix[y*vm_width+x] != green){
+				if((cur_pix[y*vm_width+(x-1)] == green))
+					total_crosses++;
+			}
+
+		}
+
+		if(total_crosses)
+			total_crosses++;
+		for (int x = least; x < most; ++x)
+		{
+			if(cur_pix[y*vm_width+x] != green){
+				if((cur_pix[y*vm_width+(x-1)] == green))
+					crosses++;
+
+				if(total_crosses % 2 == 1)
+					cur_pix[y*vm_width+x] = red;
+				else if(crosses % 2 == 1)
+					cur_pix[y*vm_width+x] = red;				
+			}
+
+		}
+
+		for (int x = least; x < most; ++x)
+		{
+			if(cur_pix[y*vm_width+x] == red)
+				cur_pix[y*vm_width+x] = green;
+
+		}				
+	}	
 }
 
 title_screen()
 {
 	//draw game logo, press start text fading in and out, sword in stone in background in forest, animated glint on logo text, stretch goal fade to cut scene
 	//draw_text("press start",)
-	g->current_gamestate++;
+
+	static bool inited = false;
+
+	if(!inited)
+	{
+		//inited = true;
+		v2 o_outer_points[7] =	      { 5, 100, 5, 175, 105, 175, 105, 100, 105, 25, 5, 25, 5, 100 };
+		v2 o_inner_points[7] =	      { 35, 100, 35, 60, 75, 60, 75, 100, 75, 140, 35, 140, 35, 100 };
+		v2 o_inner_inner_points[7] = { 45, 100, 45, 75, 65, 75, 65, 100, 65, 125, 45, 125, 45, 100 };
+		Spline o_outer_spline = { .count = countof(o_outer_points), .cpoints = o_outer_points };
+		Spline o_inner_spline = { .count = countof(o_inner_points), .cpoints = o_inner_points };
+		Spline o_inner_inner_spline = { .count = countof(o_inner_inner_points), .cpoints = o_inner_inner_points };
+
+		Spline spline_list[2] = { o_outer_spline, o_inner_spline,};// o_inner_inner_spline};
+		Glyph letter_o =  { .count = countof(spline_list), .splines = spline_list };
+
+		fill(cyan);
+
+		for (int i = 0; i < letter_o.count; ++i)
+			stroke_spline(letter_o.splines[i]);
+
+		static float t = 10;
+
+		for (int y = 0; y < 200; ++y)
+		for (int x = 0; x < 200; ++x)	
+		{
+			if(cur_pix[y*vm_width+x] == green)
+			{
+#define kernel_size 17
+				int min_x = x-kernel_size;
+				int max_x = x+kernel_size;
+				int min_y = y-kernel_size;
+				int max_y = y+kernel_size;
+
+				min_x = clamp_int(min_x, 0, vm_width);
+				min_y = clamp_int(min_y, 0, vm_height);
+				max_x = clamp_int(max_x, min_x, vm_width);
+				max_y = clamp_int(max_y, min_y, vm_height);
+
+				for (int y2 = min_y; y2 < max_y; ++y2)
+				for (int x2 = min_x; x2 < max_x; ++x2)		
+				{
+					if(cur_pix[y2*vm_width+x2] != green && !(x==x2 && y==y2)){
+						float foo = v2_dist((v2){x,y},(v2){x2,y2});
+						byte alpha = (byte)(foo*t);
+
+						int *p = (int*)&foo;
+
+						//printf("%f : %x\n",foo, *p);
+						if(cur_pix[y2*vm_width+x2] == (cyan))
+						{
+							cur_pix[y2*vm_width+x2] = *p;
+						}
+						else
+						{
+							float t = *((float*)&(cur_pix[y2*vm_width+x2]));
+							if(foo < t)
+							{
+								cur_pix[y2*vm_width+x2] = *p;
+							}							
+						}
+					}
+				}
+
+			}
+		}
+		fill_stroke();
+		for (int y = 0; y < 200; ++y)
+		for (int x = 0; x < 200; ++x)	
+		{
+			if(cur_pix[y*vm_width+x] == cyan)
+			{
+				cur_pix[y*vm_width+x] = 0x43480000;
+			}
+		}		
+
+		for (int y = 0; y < 200; ++y)
+		for (int x = 0; x < 200; ++x)	
+		{
+			if(cur_pix[y*vm_width+x] == green){
+				cur_pix[y*vm_width+x] = 0;
+			}
+		}
+
+
+		for (int y = 0; y < 200; ++y)
+		for (int x = 0; x < 200; ++x)	
+		{
+			float dist = *((float*)&(cur_pix[y*vm_width+x]));
+			if(dist < 8){
+				byte channel = 0;
+				if(dist == 0)
+					cur_pix[y*vm_width+x] = white;
+				else
+				{
+					channel = 255-(dist*30);
+					cur_pix[y*vm_width+x] = channel | channel << 8 | channel << 16;
+					//cur_pix[y*vm_width+x] = green;
+				}
+
+			}
+			else{
+				cur_pix[y*vm_width+x] = black;
+			}
+		}
+	}
 }
 
 file_select()
@@ -1128,8 +1349,25 @@ render_mesh(Mesh mesh, Material mat, Transform tr, Transform cam)
 	}
 }
 
+Sprite num_sprites[10] = 
+{
+#include "num_sprites.h"
+};
 
-field()
+draw_num(int num)
+{
+	int x = 80;
+
+	do
+	{
+		int digit = num%10;
+		num /= 10;
+		draw_sprite_t(num_sprites[digit], x, vm_height-(32+11));
+		x-=22;
+	} while (num > 0);
+}
+
+void field()
 {
 	v3 forward;
 	v3 right;
@@ -1138,21 +1376,11 @@ field()
 	static v3 player_forward = v3_forward;
 
 	terrain_mesh = generate_terrain(16,16,16,16);
-
-	Triangle test_triangle = (Triangle)
-	{
-		{0,0,0},
-		{2,0,0},
-		{0,2,0},
-	};
-
-	g->mesh_data[mesh_cursor] = test_triangle;
-
 	Mesh test_mesh = cone(v3_zero, 1, 2, 4);
-
 	mesh_cursor = 0;
 	regenerate_heart_sprites();
 	cur_tex=screen_texture;
+
 	//update
 	{
 		if(ButtonDown(START) && !button_down(g->previous_padstate,START))
@@ -1277,68 +1505,19 @@ field()
 			sword_tip = v3_rotate_xz_plane(sword_tip, player.transform.rotation.y);
 			sword_tip = v3_add(sword_tip,hand);
 
-			for (int i = 1; i < g->entity_count; ++i)
-			{
-				if(cube_intersect(transform_to_cube(player.transform),transform_to_cube(g->entities[i].transform)))
-				{
-					if(g->entities[i].entity_type == Pickup)
-					{
-						switch(g->entities[i].pickup_type)
-						{
-							case Rupee:
-							{
-								g->cur_rupees+=g->entities[i].var;
-								delete_entity(i);
-								continue;
-							} break;
-							case Fairy:
-							{
-								g->cur_health = g->max_health;
-								delete_entity(i);
-								continue;
-							} break;
-							case HeartContainer:
-							{
-								g->max_health += 4;
-								if(g->max_health > 80)
-									g->max_health = 80;
-								delete_entity(i);
-								continue;
-							} break;
-							case Heart:
-							{
-								g->cur_health ++;
-								if(g->cur_health > g->max_health)
-									g->cur_health = g->max_health;
-								delete_entity(i);
-								continue;
-							} break;
-						}
-					}
-				}
-
-				if(g->entities[i].entity_type == Enemy)
-				if(g->player_animation_state == Slashing && line_circle_intersect(hand, sword_tip, g->entities[i].transform.position, g->entities[i].transform.scale.x/2))
-				{
-					g->entities[i].health--;
-					if(g->entities[i].health<=0)
-						g->entities[i] = g->entities[--(g->entity_count)];
-				}
-			}
 
 			//terrain collision
 			{
-				v3 foo = (v3){player.transform.position.x,player.transform.position.z, 0};
-				int column = floor(player.transform.position.x);
-				int row = floor(player.transform.position.z);
+				int column = floor(player_pos.x);
+				int row = floor(player_pos.z);
 
 				int index = -1;
 				if(!(row < 0 || column < 0))
 				{
-					float foo_x = foo.x-(int)foo.x;//fractional part
-					float foo_y = foo.y-(int)foo.y;//fractional part
+					float frac_x = player_pos.x-(int)player_pos.x;//fractional part
+					float frac_z = player_pos.z-(int)player_pos.z;//fractional part
 					index = (row*32+column*2)*1;
-					if(foo_x+foo_y > 1)
+					if(frac_x+frac_z > 1)
 						index++;
 				}
 
@@ -1366,6 +1545,110 @@ field()
 			}
 		}
 
+			for (int i = 1; i < g->entity_count; ++i)
+			{
+				#define cur_ent g->entities[i]
+
+				if(cur_ent.entity_type == Enemy)
+				{
+					typedef enum
+					{
+						Patrol,
+						Chase,
+					} EnemyState;
+					static EnemyState enemy_state = Patrol;
+
+						static bool reverse = false;
+					if(enemy_state == Patrol)
+					{
+
+						if(!reverse && cur_ent.transform.position.x < 5){
+
+							cur_ent.transform.position.x+=g->delta_time;
+							if(cur_ent.transform.position.x >= 5)
+								reverse = true;
+						}
+						else if(reverse && cur_ent.transform.position.x > 0){
+
+							cur_ent.transform.position.x-=g->delta_time;
+							if(cur_ent.transform.position.x <= 0)
+								reverse = false;
+						}
+
+						if(v3_dist(cur_ent.transform.position, player_pos) < 3.5f)//todo and *facing* player
+						{
+							enemy_state = Chase;
+						}
+					}
+					else if(enemy_state == Chase)
+					{
+						v3 dir = v3_normalized(v3_sub(player_pos, cur_ent.transform.position));
+						v3 vel = v3_scale(dir, g->delta_time*3.5f);
+						if(v3_dist(cur_ent.transform.position, player_pos) > 6){
+							enemy_state = Patrol;
+							if(cur_ent.transform.position.x <= 0)
+								reverse = false;
+							else if(cur_ent.transform.position.x >= 5)
+								reverse	= true;
+						}
+						else if(v3_dist(cur_ent.transform.position, player_pos) > 1)
+							cur_ent.transform.position = v3_add(cur_ent.transform.position,vel);
+					}
+				}
+
+				if(cube_intersect(transform_to_cube(player.transform),transform_to_cube(g->entities[i].transform)))
+				{
+					if(g->entities[i].entity_type == Pickup)
+					{
+						switch(g->entities[i].pickup_type)
+						{
+							case Rupee:
+							{
+								g->cur_rupees+=g->entities[i].var;
+								//queue audio
+								{
+									queue_sound(samp_cow, samples);
+								}								
+							} break;
+							case Fairy:
+							{
+								g->cur_health = g->max_health;
+							} break;
+							case HeartContainer:
+							{
+								g->max_health += 4;							
+								queue_sound(samp_cow, samples);
+							} break;
+							case Heart:
+							{
+								g->t = 0;
+								g->target_health = g->cur_health+16;
+								if(g->target_health	 > g->max_health)
+									g->target_health = g->max_health;
+							} break;
+						}
+						
+						delete_entity(i);
+					}
+					else if(g->entities[i].entity_type == Trigger)
+					{
+						g->current_gamestate = g->entities[i].var;
+						return;
+					}
+					else if(g->entities[i].entity_type == Enemy)
+						take_damage();
+
+				}
+
+				if(g->entities[i].entity_type == Enemy)
+				if(g->player_animation_state == Slashing && line_circle_intersect(hand, sword_tip, g->entities[i].transform.position, g->entities[i].transform.scale.x/2))
+				{
+					g->entities[i].health--;
+					if(g->entities[i].health<=0)
+						g->entities[i] = g->entities[--(g->entity_count)];
+				}
+			}
+
 		if(ButtonDown(X) && g->player_animation_state != Slashing)
 		{
 			g->player_animation_state = Slashing;
@@ -1382,6 +1665,28 @@ field()
 			g->anim_timer-=g->delta_time;
 		else 
 			g->player_animation_state = Idle;
+
+		if(g->damage_cooldown > 0){
+			g->damage_cooldown -= g->delta_time;
+			if(g->damage_cooldown <= .1f)
+				player.color = green;
+		}
+
+		
+		if(g->t > .125f && g->cur_health < g->target_health)
+		{
+			g->t = 0;
+			g->cur_health++;
+			u32 samples[samp_cow];
+			
+			for (int i = 0; i < samp_cow; ++i)
+			{
+				samples[i] = (s32)(sin((float)i*5900)*(INT_MAX/200));
+			}
+			queue_sound(samp_cow, samples);			
+		}
+
+		g->t+= g->delta_time;
 	}
 
 	//render
@@ -1390,38 +1695,49 @@ field()
 		//scene
 		if(g->render_scene)
 		{
-			//environment
+
+			if(g->is_3D)
 			{
-				sky();
-				sun();
-				mountains();
-				//draw_terrain();
+				//environment
+				{
+					sky();
+					sun();
+					mountains();
+				}
+
 				render_mesh(terrain_mesh, (Material){flat_shaded},default_transform,default_transform);
 				Color col = green;
 				Transform tr = default_transform;
 				tr.position = player.transform.position;
 				render_mesh(test_mesh, (Material){shade_solid,&col},tr, default_transform);
 			}
-
-			for (int i = 0; i < g->entity_count; ++i)
+			else
 			{
-				if(g->entities[i].draw_sprite)
-					draw_sprite_t(*(g->entities[i].sprite),(vm_width-sprite_size)/2+g->entities[i].transform.position.x*unit_size,(vm_height-sprite_size)/2-g->entities[i].transform.position.z*unit_size);
-				if(g->entities[i].do_draw_rect)
-					render_rect(g->entities[i].color, g->entities[i].transform);
-			}
+				fill(0x66);
+				for (int i = 0; i < g->entity_count; ++i)
+				{
+					if(g->entities[i].draw_sprite)
+						render_sprite_t(*(g->entities[i].sprite), g->entities[i].transform);
+					if(g->entities[i].do_draw_rect)
+						render_rect(g->entities[i].color, g->entities[i].transform);
+				}
 
-			if(g->draw_camera_gizmo)
-			{
-				render_rect(green, g->camera);
-				render_rect(blue, t_from_v_and_s(forward,.2f));
-				render_rect(red, t_from_v_and_s(right,.2f));
-			}
+				if(g->draw_camera_gizmo)
+				{
+					render_rect(green, g->camera);
+					render_rect(blue, t_from_v_and_s(forward,.2f));
+					render_rect(red, t_from_v_and_s(right,.2f));
+				}
 
-			if(g->player_animation_state == Slashing)
-			{
-				render_rect(0x555555, t_from_v_and_s(hand,.3f));
-				render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
+				if(g->player_animation_state == Slashing)
+				{
+					int count = 4;
+					for (int i = 0; i < count; ++i)
+					{
+						render_rect(0x555555, t_from_v_and_s(v3_lerp(hand,sword_tip,i/(float)count),.3f));
+					}
+					render_rect(0x555555, t_from_v_and_s(sword_tip,.3f));
+				}
 			}
 		}
 		else
@@ -1483,8 +1799,9 @@ field()
 
 				//wallet
 				{
-					fill_rect(green, (Rect){0,vm_height-5,g->cur_rupees,5});
-					//todo grab fontset file from platfighter project for text drawing
+					fill_circle2(brown, (v2){32,vm_height-32}, 16, 2);
+					fill_triangle((Triangle){32,vm_height-32,0,55,vm_height-48,0,22,vm_height-60,0},brown);
+					draw_num(g->cur_rupees);
 				}
 
 				//command buttons
@@ -1502,9 +1819,9 @@ field()
 				//item buttons
 				{
 					float rad = 16;
-					fill_circle2(yellow,(v2){vm_width-(32+32+32+32),32}, rad, 1);
-					fill_circle2(yellow,(v2){vm_width-(32+32+32), 64}, rad, 1);
-					fill_circle2(yellow,(v2){vm_width-(32+32),32}, rad, 1);
+					fill_circle2(yellow,(v2){vm_width-(32+32+32+32),32}, rad, 1.5f);
+					fill_circle2(yellow,(v2){vm_width-(32+32+32), 64}, rad, 1.5f);
+					fill_circle2(yellow,(v2){vm_width-(32+32),32}, rad, 1.5f);
 				}
 				
 				cur_tex = screen_texture;
@@ -1515,15 +1832,13 @@ field()
 	}
 }
 
-dungeon()
-{
-	g->current_gamestate++;
-}
+dungeon() { fill(0x005500); }
 
 paused()
 {
 	fill_rect(red,(Rect){10,10,vm_width-20,vm_height-20});
-	if(ButtonDown(START) && !button_down(g->previous_padstate,START)){
+	if(ButtonDown(START) && !button_down(g->previous_padstate,START))
+	{
 		g->current_gamestate = g->previous_gamestate;
 		g->previous_gamestate = 0;
 	}
@@ -1615,27 +1930,20 @@ void terrain_editor()
 	mesh_cursor = 0;
 
 	if(GetAsyncKeyState(VK_DOWN))
-	{
 		g->camera.position.z -= g->delta_time;
-	}
 	if(GetAsyncKeyState(VK_UP))
-	{
 		g->camera.position.z += g->delta_time;
-	}
 	if(GetAsyncKeyState(VK_LEFT))
-	{
 		g->camera.position.x -= g->delta_time;
-	}
 	if(GetAsyncKeyState(VK_RIGHT))
-	{
 		g->camera.position.x += g->delta_time;
-	}
+	
 	render_mesh(terrain_mesh, (Material){flat_shaded}, default_transform, g->camera);
 
 }
 #endif
 
-void (*scenes[scene_count])(void) = 
+void (*scenes[scene_count])() = 
 {
 	[SplashScreen] = &splash_screen,
 	[TitleScreen] = &title_screen,
@@ -1652,6 +1960,7 @@ void (*scenes[scene_count])(void) =
 
 void _tick()
 {
+#if DEBUG
 	static bool was = false;
 	if(GetAsyncKeyState(VK_TAB))
 	{
@@ -1662,9 +1971,8 @@ void _tick()
 		}
 	}
 	else
-	{
 		was = false;
-	}
+#endif
 	(scenes[g->current_gamestate])();
 	g->previous_padstate = mem.game_pads[0];
 	g->time += g->delta_time;

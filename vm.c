@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdbool.h>
+#include "input.h"
 #define kilobyte (1024)
 #define megabyte (1024*1024)
 
@@ -31,7 +34,7 @@ typedef union Memory
 {
 	struct
 	{
-		byte        padding[capacity-(sizeof(GamePad)*4+sizeof(AudioBuffer)+sizeof(FrameBuffer))];
+		byte        user_mem[capacity-(sizeof(GamePad)*4+sizeof(AudioBuffer)+sizeof(FrameBuffer))];
 		GamePad     game_pads[4];
 		AudioBuffer audio_buffer;
 		FrameBuffer frame_buffer;
@@ -97,17 +100,17 @@ typedef enum OpCode
 	opcode_count,
 } OpCode;
 
-char* OpNames[0] = 
-{
-	// "NOP",
-	// "SET",
-	// "MULT",
-	// "INC",
-	// "ADD",
-	// "JLT",
-	// "JMP",
-	// "HALT",
-};
+// char* OpNames[0] = 
+// {
+// 	// "NOP",
+// 	// "SET",
+// 	// "MULT",
+// 	// "INC",
+// 	// "ADD",
+// 	// "JLT",
+// 	// "JMP",
+// 	// "HALT",
+// };
 
 #define RAM humidor.memory.RAM
 #define PC  humidor.cpu.PC
@@ -115,7 +118,7 @@ char* OpNames[0] =
 
 //helpers
 #define start_address 0
-#define screen_address ((sizeof(humidor.memory.padding)+sizeof(humidor.memory.game_pads)+sizeof(humidor.memory.audio_buffer))/sizeof(u32))
+#define screen_address ((sizeof(humidor.memory.user_mem)+sizeof(humidor.memory.game_pads)+sizeof(humidor.memory.audio_buffer))/sizeof(u32))
 
 
 #include "live_assembler.c"
@@ -233,6 +236,30 @@ void tick()
 				*a = (*b) + (*c);
 				NPC+=3;
 			} break;
+			case OP_SUB:
+			{
+				u32 *a;
+				u32 *b;	
+				u32 *c;
+				
+				if(a_mode(op))
+					a = &RAM[RAM[RAM[PC+1]]];
+				else
+					a = &RAM[RAM[PC+1]];
+
+				if(b_mode(op))
+					b = &RAM[RAM[PC+2]];
+				else
+					b = &RAM[PC+2];
+				
+				if(c_mode(op))
+					c = &RAM[RAM[PC+3]];
+				else
+					c = &RAM[PC+3];
+				
+				*a = (*b) - (*c);
+				NPC+=3;
+			} break;			
 			case OP_JLT:
 			{
 				u32 *a;
@@ -256,6 +283,29 @@ void tick()
 
 				jump_cond(((*b) < (*c)), (*a));
 			} break;
+			case OP_JGT:
+			{
+				u32 *a;
+				u32 *b;			
+				u32 *c;
+
+				if(a_mode(op))
+					a = &RAM[RAM[PC+1]];
+				else
+					a = &RAM[PC+1];
+
+				if(b_mode(op))
+					b = &RAM[RAM[PC+2]];
+				else
+					b = &RAM[PC+2];
+
+				if(c_mode(op))
+					c = &RAM[RAM[PC+3]];
+				else
+					c = &RAM[PC+3];
+
+				jump_cond(((*b) > (*c)), (*a));
+			} break;			
 			case OP_JMP:
 			{
 				if(a_mode(op))
@@ -263,6 +313,29 @@ void tick()
 				else
 					NPC = RAM[PC+1];
 			} break;
+			case OP_JEQ:
+			{
+				u32 *a;
+				u32 *b;			
+				u32 *c;
+
+				if(a_mode(op))
+					a = &RAM[RAM[PC+1]];
+				else
+					a = &RAM[PC+1];
+
+				if(b_mode(op))
+					b = &RAM[RAM[PC+2]];
+				else
+					b = &RAM[PC+2];
+
+				if(c_mode(op))
+					c = &RAM[RAM[PC+3]];
+				else
+					c = &RAM[PC+3];
+
+				jump_cond(((*b) == (*c)), (*a));
+			} break;		
 			case OP_HALT:
 			{
 				printf("HALTED!\n");
@@ -284,14 +357,14 @@ void tick()
 
 u32 arg1,arg2,arg3;
 
-void decode_1_arg(u32 op, OpCode opcode)
+void decode_1_arg(u32 op)
 {
 	arg1 = (op & 0xFFFFFF);
-	if(a_mode(opcode))
+	if(op & 0x80000000)
 		arg1 = RAM[arg1];
 }
 
-void decode_2_arg(u32 op, OpCode opcode)
+void decode_2_arg(u32 op)
 {
 	arg1 = (op & 0xFF0000) >> 16;
 	arg2 = (op & 0xFFFF);
@@ -305,7 +378,7 @@ void decode_2_arg(u32 op, OpCode opcode)
 	}
 }
 
-void decode_3_arg(u32 op, OpCode opcode)
+void decode_3_arg(u32 op)
 {
 	arg1 = (op & 0xFF0000) >> 16;
 	arg2 = (op & 0xFF00) >> 8;
@@ -319,7 +392,7 @@ void decode_3_arg(u32 op, OpCode opcode)
 }
 
 //used for shifts. Since a shift can only be 0-31, only used 5 bits for arg3 and gave the extra bits to arg2
-void decode_shift_arg(u32 op, OpCode opcode)
+void decode_shift_arg(u32 op)
 {
 	arg1 = (op & 0xFF0000) >> 16;
 	arg2 = (op & 0xFFE0) >> 5;
@@ -347,87 +420,87 @@ void execute(int count, u32 ops[])
 				case OP_NOP:
 					break;
 				case OP_INC:
-					decode_1_arg(op, opcode);
+					decode_1_arg(op);
 					RAM[arg1]++;
 					break;
 				case OP_DEC:
-					decode_1_arg(op, opcode);
+					decode_1_arg(op);
 					RAM[arg1]--;				
 					break;			
 				case OP_SET:
-					decode_2_arg(op, opcode);
+					decode_2_arg(op);
 					RAM[arg1] = arg2;
 					break;
 			}
 			//arithmetic
 			{
 				case OP_ADD:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2+arg3;
 					break;
 				case OP_SUB:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2-arg3;
 					break;
 				case OP_MUL:
-					//decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2*arg3;
 					break;
 				case OP_DIV:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2/arg3;
 					break;
 			}
 			//logic/bitwise ops
 			{
 				case OP_NOT:
-					decode_2_arg(op, opcode);
+					decode_2_arg(op);
 					RAM[arg1] = !arg2;
 					break;
 				case OP_AND:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2 & arg3;
 					break;							
 				case OP_IOR:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2 | arg3;
 					break;				
 				case OP_XOR:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					RAM[arg1] = arg2 ^ arg3;
 					break;				
 				case OP_LSL:
-					decode_shift_arg(op, opcode);
+					decode_shift_arg(op);
 					RAM[arg1] = arg2 << arg3;
 					break;
 				case OP_RSL:
-					decode_shift_arg(op, opcode);
+					decode_shift_arg(op);
 					RAM[arg1] = arg2 >> arg3;
 					break;
 			}
 			//branch/jump
 			{
 				case OP_JMP:
-					decode_1_arg(op, opcode);
+					decode_1_arg(op);
 					NPC = arg1;
 					break;
 				case OP_JEQ:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					if(arg2 == arg3)
 						NPC = arg1;
 					break;
 				case OP_JNE:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					if(arg2 != arg3)
 						NPC = arg1;
 					break;
 				case OP_JLT:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					if(arg2 < arg3)
 						NPC = arg1;
 					break;
 				case OP_JGT:
-					decode_3_arg(op, opcode);
+					decode_3_arg(op);
 					if(arg2 > arg3)
 						NPC = arg1;
 					break;

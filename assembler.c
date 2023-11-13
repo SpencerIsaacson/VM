@@ -7,25 +7,33 @@
 
 typedef enum
 {
-	keyw_set,
-	keyw_inc,
-	keyw_add,
-	keyw_mult,
-	keyw_jmp,
-	keyw_jlt,
-	keyw_halt,
-	keyword_count,
-} Keyword;
-
-char * keywords[keyword_count] =
+	NOT_IMPLEMENTED
+} ErrorCodes;
+char * keywords[] =
 {
-	[keyw_set] = "set",
-	[keyw_inc] = "inc",
-	[keyw_halt] = "halt",
-	[keyw_jmp] = "jmp",
-	[keyw_add] = "add",
-	[keyw_mult] = "mult",
-	[keyw_jlt] = "jlt",
+	//basics
+	[OP_NOP] = "nop",
+	[OP_INC] = "inc",
+	[OP_DEC] = "dec",
+	[OP_SET] = "set",
+	//arithmetic
+	[OP_ADD] = "add",
+	[OP_SUB] = "sub",
+	[OP_MUL] = "mul",
+	[OP_DIV] = "div",
+	//logic
+	[OP_NOT] = "not",
+	[OP_AND] = "and",
+	[OP_IOR] = "ior",
+	[OP_XOR] = "xor",
+	[OP_LSL] = "lsl",
+	[OP_RSL] = "rsl",
+	//branch
+	[OP_JMP] = "jmp",
+	[OP_JLT] = "jlt",
+	[OP_JGT] = "jgt",
+	[OP_JEQ] = "jeq",
+	[OP_JNE] = "jne",	
 };
 
 char str_eq(char *a, char *b)
@@ -53,48 +61,191 @@ int parse_int(char *s)
 	return ret;
 }
 
+char* read_file(char *path, int* chl)
+{
+	FILE* file = fopen(path,"rb");
+	if(file == NULL){
+		printf("File \"%s\" does not exist\n", path);
+		exit(-1);
+	}
+	else
+	{
+		fseek(file,0,SEEK_END);
+		int chars_long = ftell(file);
+		rewind(file);
+		char *data = (char*)malloc(chars_long+1);
+		data[chars_long] = 0;
+		fread(data, chars_long,1,file);
+		fclose(file);
+		*chl = chars_long;
+		return data;
+	}
+}
+
+void uno_arg(OpCode opcode, int *cursor_o, char *line)
+{
+	int cursor = *cursor_o;
+	cursor++;
+	AddrMode dest_mode = IMM;
+	if(line[cursor] == '@')
+	{
+		dest_mode  = IND;
+		cursor++;
+	}
+
+	char dest_text[50] = {0};
+	int i = 0;
+	while(line[cursor] != '\n' && line[cursor] != ' ' && line[cursor] != '\t')
+	{
+		dest_text[i++] = line[cursor++];
+	}
+
+	u32 dest = parse_int(dest_text);
+	cursor++;
+
+	emit_1_arg_vw(opcode, (Op32){dest_mode, dest});
+	*cursor_o = cursor;	
+}
+
+void tres_arg(OpCode opcode, int *cursor_o, char *line)
+{
+	int cursor = *cursor_o;	
+	cursor++;
+	AddrMode dest_mode = IMM;
+	if(line[cursor] == '@')
+	{
+		dest_mode  = IND;
+		cursor++;
+	}
+
+	char text[50] = {0};
+	int i = 0;
+	while(line[cursor] != ' ')
+	{
+		text[i++] = line[cursor++];
+	}
+	text[i] = 0;
+
+	u32 dest = parse_int(text);
+	cursor++;
+
+	AddrMode lh_m = IMM;
+	if(line[cursor] == '@')
+	{
+		lh_m  = IND;
+		cursor++;
+	}
+
+	i = 0;
+	while(line[cursor] != ' ')
+	{
+		text[i++] = line[cursor++];
+	}
+	text[i] = 0;
+
+	u32 lhs = parse_int(text);
+	cursor++;
+
+
+	AddrMode rh_m = IMM;
+	if(line[cursor] == '@')
+	{
+		rh_m  = IND;
+		cursor++;
+	}
+
+	i = 0;
+	while(line[cursor] != ' ' && line[cursor] != '\r' && line[cursor] != '\n' && line[cursor] != ';')
+	{
+		text[i++] = line[cursor++];
+	}
+	text[i] = 0;
+
+	u32 rhs = parse_int(text);
+	cursor++;
+
+	emit_3_arg_vw(opcode, (Op32){dest_mode, dest}, (Op32){lh_m, lhs}, (Op32){rh_m, rhs});
+	*cursor_o = cursor;	
+}
+
+void dos_arg(OpCode opcode, int *cursor_o, char *line)
+{
+	int cursor = *cursor_o;
+	cursor++;
+	AddrMode dest_mode = IMM;
+	if(line[cursor] == '@')
+	{
+		dest_mode  = IND;
+		cursor++;
+	}
+
+	char dest_text[50] = {0};
+	int i = 0;
+	while(line[cursor] != ' ')
+	{
+		dest_text[i++] = line[cursor++];
+	}
+
+	u32 dest = parse_int(dest_text);
+	cursor++;
+	AddrMode val_mode = IMM;
+	if(line[cursor] == '@')
+	{
+		val_mode = IND;
+		cursor++;
+	}
+
+	char val_text[50] = {0};
+	i = 0;
+	while(line[cursor] != ' ' && line[cursor] != '\r' && line[cursor] != '\t' && line[cursor] != '\n' && line[cursor] != ';')
+	{
+		val_text[i++] = line[cursor++];
+	}
+
+	// for(int o = 0; o < 50; o++)
+	// {
+	// 	printf("%d",val_text[o]);
+	// 	if(val_text[o]==0)
+	// 		break;
+	// 	else
+	// 		printf(", ");
+	// }
+	// printf("val_text:%s\n", val_text);
+	u32 val = parse_int(val_text);
+	// printf("val: %d\n", val);
+	cursor++;
+	emit_2_arg_vw(opcode, (Op32){dest_mode, dest}, (Op32){val_mode, val});
+
+	*cursor_o = cursor;
+
+}
+
 int main(int argc, char** argv)
 {
 	if(argc == 2)
 	{
-		char* text;
-		int characters_long;
-		
-		//read file
-		{
-			FILE* file = fopen(argv[1],"rb");
-			if(file == NULL){
-				printf("File \"%s\" does not exist\n", argv[1]);
-				exit(-1);
-			}
-			else
-			{
-				fseek(file,0,SEEK_END);
-				characters_long = ftell(file);
-				rewind(file);
-				text = (char*)malloc(characters_long+1);
-				text[characters_long] = 0;
-				fread(text, characters_long,1,file);
-				fclose(file);
-			}
-		}
+		int chars_long;
+		char* text = read_file(argv[1], &chars_long);
 
+
+		if(text != NULL)
 		while(*text != 0)
 		{		
 			char line[300] = {0};
+			
 			//read line
 			{
 				int i = 0;
-				while(*text != '\n')
+				while(*text != '\r' && *text != ';')
 				{
 					line[i++] = *(text++);
 				}
 				line[i] = '\n';
+				while(*text != '\n') text++;
 				text++;
 			}
 
-
-			Keyword keyword = -1;
+			OpCode keyword = -1;
 			int cursor = 0;
 			//get keyword
 			{
@@ -106,7 +257,7 @@ int main(int argc, char** argv)
 					}
 				}
 
-				for (int i = 0; i < keyword_count; ++i)
+				for (int i = 0; i < opcode_count; ++i)
 				{
 					if(str_eq(keyword_text, keywords[i]))
 					{
@@ -118,259 +269,37 @@ int main(int argc, char** argv)
 
 			switch(keyword)
 			{
-				case keyw_set:
+				case OP_NOP:
+				case OP_HALT:
 				{
-					cursor++;
-					AddressingMode dest_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						dest_mode  = IND;
-						cursor++;
-					}
-
-					char dest_text[50] = {0};
-					int i = 0;
-					while(line[cursor] != ' ')
-					{
-						dest_text[i++] = line[cursor++];
-					}
-
-					u32 dest = parse_int(dest_text);
-					cursor++;
-					printf("next char:%c\n", line[cursor]);
-					AddressingMode val_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						val_mode  = IND;
-						cursor++;
-					}
-
-					char val_text[50] = {0};
-					i = 0;
-					while(line[cursor] != '\n')
-					{
-						val_text[i++] = line[cursor++];
-					}
-
-					u32 val = parse_int(val_text);
-					cursor++;
-					u32 res = set(dest, val, dest_mode, val_mode);
-					printf("res: %d\n", res);
+					exit(NOT_IMPLEMENTED);
 				} break;
-				case keyw_halt:
+				case OP_INC:
+				case OP_DEC:
+				case OP_JMP:
 				{
-					halt();
+					uno_arg(keyword, &cursor,line);	
 				} break;
-				case keyw_jmp:
+				case OP_SET:
+				case OP_NOT:
 				{
-					cursor++;
-					AddressingMode dest_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						dest_mode  = IND;
-						cursor++;
-					}
-
-					char dest_text[50] = {0};
-					int i = 0;
-					while(line[cursor] != '\n')
-					{
-						dest_text[i++] = line[cursor++];
-					}
-
-					u32 dest = parse_int(dest_text);
-					cursor++;
-
-					jmp(dest, dest_mode);		
+					dos_arg(keyword, &cursor,line);
 				} break;
-				case keyw_jlt:
+				case OP_ADD:
+				case OP_SUB:
+				case OP_MUL:
+				case OP_DIV:
+				case OP_AND:
+				case OP_IOR:
+				case OP_XOR:
+				case OP_LSL:
+				case OP_RSL:				
+				case OP_JLT:
+				case OP_JGT:
+				case OP_JEQ:
+				case OP_JNE:
 				{
-					cursor++;
-					AddressingMode dest_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						dest_mode  = IND;
-						cursor++;
-					}
-
-					char text[50] = {0};
-					int i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 dest = parse_int(text);
-					cursor++;
-
-					AddressingMode lh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						lh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 lhs = parse_int(text);
-					cursor++;
-
-
-					AddressingMode rh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						rh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != '\n')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 rhs = parse_int(text);
-					cursor++;
-
-					jlt(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
-				} break;
-				case keyw_inc:
-				{
-					cursor++;
-					char dest_text[50] = {0};
-					int i = 0;
-					while(line[cursor] != '\n')
-					{
-						dest_text[i++] = line[cursor++];
-					}
-
-					u32 dest = parse_int(dest_text);
-					cursor++;
-
-					inc(dest);		
-				} break;
-				case keyw_add:
-				{
-					cursor++;
-					AddressingMode dest_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						dest_mode  = IND;
-						cursor++;
-					}
-
-					char text[50] = {0};
-					int i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 dest = parse_int(text);
-					cursor++;
-
-					AddressingMode lh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						lh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 lhs = parse_int(text);
-					cursor++;
-
-
-					AddressingMode rh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						rh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != '\n')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 rhs = parse_int(text);
-					cursor++;
-
-					add(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
-				} break;
-				case keyw_mult:
-				{
-					cursor++;
-					AddressingMode dest_mode = IMM;
-					if(line[cursor] == '@')
-					{
-						dest_mode  = IND;
-						cursor++;
-					}
-
-					char text[50] = {0};
-					int i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 dest = parse_int(text);
-					cursor++;
-
-					AddressingMode lh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						lh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != ' ')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 lhs = parse_int(text);
-					cursor++;
-
-
-					AddressingMode rh_m = IMM;
-					if(line[cursor] == '@')
-					{
-						rh_m  = IND;
-						cursor++;
-					}
-
-					i = 0;
-					while(line[cursor] != '\n')
-					{
-						text[i++] = line[cursor++];
-					}
-					text[i] = 0;
-
-					u32 rhs = parse_int(text);
-					cursor++;
-
-					mult(dest, lhs, rhs, dest_mode, lh_m, rh_m);		
+					tres_arg(keyword, &cursor,line);	
 				} break;
 			}
 		}
@@ -378,6 +307,7 @@ int main(int argc, char** argv)
 		u32 byte_count = (next_word-start_address)*4;
 
 		FILE *file = fopen("assembly.bin", "wb");
-		fwrite(&stronkbox.memory.RAM[start_address], byte_count,1,file);
+		fwrite(&humidor.memory.RAM[start_address], byte_count,1,file);
 	}
 }
+

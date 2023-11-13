@@ -1,3 +1,5 @@
+#ifndef HUMIDOR_INPUT
+#define HUMIDOR_INPUT
 typedef struct 
 {
 	float x, y;
@@ -107,3 +109,4 @@ bool KeyDown(enum Keys key)
 // 			keys_stale[i] = false;
 // 	}
 // }
+#endif

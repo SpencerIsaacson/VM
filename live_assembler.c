@@ -3,7 +3,7 @@ int next_word = start_address;
 /*
 	A brief note: this system currently supports a fixed width and variable width encoding until further notice.
 	The kinks are still being worked out. The fixed width (fw) and variable width (vw) emitters work very differently.
-	The vw emitters assemble the instructions *into* the console memory and advance the "next_word" pointer.
+	The vw emitters assemble the instructions *into* the console memory and advance the "next_word" cursor.
 	The fw emitters just return a u32 that represents the full instruction, and are in that way far more flexible.
 */
 
@@ -12,13 +12,43 @@ typedef struct { AddrMode mode; u8  val; } Op5;
 typedef struct { AddrMode mode; u16 val; } Op11;
 typedef struct { AddrMode mode; u16 val; } Op16;
 typedef struct { AddrMode mode; u32 val; } Op24;
+typedef struct { AddrMode mode; u32 val; } Op32;
 
 //INSTRUCTION FORMATS
 //todo guarantee args are in proper ranges
 
 //Variable Width
 
-//todo
+void emit_0_arg_vw(OpCode opcode)
+{ RAM[next_word++] = opcode; }
+
+void emit_1_arg_vw(OpCode opcode, Op32 addr)
+{
+	RAM[next_word++] = (addr.mode << 7) | opcode;
+	RAM[next_word++] = addr.val;
+}
+
+void emit_2_arg_vw(OpCode opcode, Op32 dest, Op32 val) 
+{
+	u32 i = (dest.mode << 7) | (val.mode << 6) | opcode;
+	RAM[next_word++] = i;
+	RAM[next_word++] = dest.val;
+	RAM[next_word++] = val.val;
+}
+
+void emit_3_arg_vw(OpCode opcode, Op32 dest, Op32 lhs, Op32 rhs)
+{
+	u32 i = (dest.mode << 7) | (lhs.mode << 6) | (rhs.mode << 5)  | opcode;
+	RAM[next_word++] = i;
+	RAM[next_word++] = dest.val;
+	RAM[next_word++] = lhs.val;
+	RAM[next_word++] = rhs.val;
+}
+
+#define VW0(func_name, opcode) void func_name()							{ emit_0_arg_vw(opcode); }
+#define VW1(func_name, opcode) void func_name(Op32 a)					{ emit_1_arg_vw(opcode, a); }
+#define VW2(func_name, opcode) void func_name(Op32 a, Op32 b)			{ emit_2_arg_vw(opcode, a, b); }
+#define VW3(func_name, opcode) void func_name(Op32 a, Op32 b, Op32 c)	{ emit_3_arg_vw(opcode, a, b, c); }
 
 //Fixed Width
 
@@ -28,10 +58,10 @@ u32 emit_0_arg_fw(OpCode opcode)
 
 //for ops that take 1 24-bit arg
 u32 emit_1_arg_fw(OpCode opcode, Op24 addr)
-{   return (((addr.mode << 7) | opcode) << 24) | addr.val;   }
+{   addr.val &= 0xFFFFFF; return (((addr.mode << 7) | opcode) << 24) | addr.val;   }
 
 //for ops that take 1 8-bit arg and 1 16-bit arg
-u32 emit_2_arg_fw(OpCode opcode, Op8 dest, Op16 val) 
+u32 emit_2_arg_fw(OpCode opcode, Op8 dest, Op16 val)
 {   return ( ((dest.mode << 7) | (val.mode << 6) | opcode) << 24) | (dest.val << 16) | (val.val);   }
 
 //for ops that take 3 8-bit args
@@ -42,215 +72,72 @@ u32 emit_3_arg_fw(OpCode opcode, Op8 dest, Op8 lhs, Op8 rhs)
 u32 emit_shift_arg_fw(OpCode opcode, Op8 dest, Op11 lhs, Op5 rhs)
 {   return (((dest.mode << 7) | (lhs.mode << 6) | (rhs.mode << 5)  | opcode) << 24) | (dest.val << 16) | (lhs.val << 5) | (rhs.val);   }
 
-#define      ARG0(func_name, opcode) u32 func_name()                     { return     emit_0_arg_fw(opcode); }
-#define      ARG1(func_name, opcode) u32 func_name(Op24 a)               { return     emit_1_arg_fw(opcode, a); }
-#define      ARG2(func_name, opcode) u32 func_name(Op8 a, Op16 b)        { return     emit_2_arg_fw(opcode, a, b); }
-#define      ARG3(func_name, opcode) u32 func_name(Op8 a, Op8  b, Op8 c) { return     emit_3_arg_fw(opcode, a, b, c); }
-#define ARG_SHIFT(func_name, opcode) u32 func_name(Op8 a, Op11 b, Op5 c) { return emit_shift_arg_fw(opcode, a, b, c); }
+
+#define FW0(func_name, opcode) u32 func_name()                     { return     emit_0_arg_fw(opcode); }
+#define FW1(func_name, opcode) u32 func_name(Op24 a)               { return     emit_1_arg_fw(opcode, a); }
+#define FW2(func_name, opcode) u32 func_name(Op8 a, Op16 b)        { return     emit_2_arg_fw(opcode, a, b); }
+#define FW3(func_name, opcode) u32 func_name(Op8 a, Op8  b, Op8 c) { return     emit_3_arg_fw(opcode, a, b, c); }
+#define FWS(func_name, opcode) u32 func_name(Op8 a, Op11 b, Op5 c) { return emit_shift_arg_fw(opcode, a, b, c); }
 
 #define emit_func(func_name, opcode, format) \
     format(func_name, opcode)
 
 //EMITTERS
+#define f emit_func
 
 //Variable Width
-
 //basics
-void nop_vw()
-{   RAM[next_word++] = OP_NOP;   }
-
-//todo add addr mode like in fw
-void inc_vw(u32 addr)
-{
-	RAM[next_word] = OP_INC;
-	next_word++;
-	RAM[next_word] = addr;
-	next_word++;
-}
-
-void dec_vw(u32 addr)
-{
-	RAM[next_word] = OP_DEC;
-	next_word++;
-	RAM[next_word] = addr;
-	next_word++;
-}
-
-void set_vw(AddrMode dest_m, u32 dest, AddrMode val_m, u32 val) 
-{
-	u32 i = (dest_m << 7) | (val_m << 6) | OP_SET;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = val;
-	next_word++;
-}
-
+f(nop_vw, OP_NOP, VW0);
+f(inc_vw, OP_INC, VW1);
+f(dec_vw, OP_DEC, VW1);
+f(set_vw, OP_SET, VW2);
 //arithmetic
-void add_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_ADD;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;	
-}
-
-void sub_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_SUB;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;	
-}
-
-void mult_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_MUL;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;	
-}
-
-void div_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_DIV;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;	
-}
-
+f(add_vw, OP_ADD, VW3);
+f(sub_vw, OP_SUB, VW3);
+f(mul_vw, OP_MUL, VW3);
+f(div_vw, OP_DIV, VW3);
 //logic/bitwise
-void not_vw(AddrMode dest_m, u32 dest, AddrMode val_m, u32 val)
-{   /*todo*/   }
-
-void and_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{   /*todo*/   }
-
-void or_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{   /*todo*/   }
-
-void xor_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{   /*todo*/   }
-
-void lsl_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{   /*todo*/   }
-
-void rsl_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{   /*todo*/   }
-
+f(not_vw, OP_NOT, VW2);
+f(and_vw, OP_AND, VW3);
+f(ior_vw, OP_IOR, VW3);
+f(xor_vw, OP_XOR, VW3);
+f(lsl_vw, OP_LSL, VW3);
+f(rsl_vw, OP_RSL, VW3);
 //branch/jump
-u32 jmp_vw(AddrMode dest_m, u32 dest)
-{
-	RAM[next_word] = (dest_m << 7)| OP_JMP;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-}
-
-void jeq_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_JEQ;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;
-}
-
-void jne_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_JNE;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;
-}
-
-void jlt_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_JLT;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;
-}
-
-void jgt_vw(AddrMode dest_m, u32 dest, AddrMode lh_m, u32 lhs, AddrMode rh_m, u32 rhs)
-{
-	u32 i = (dest_m << 7) | (lh_m << 6) | (rh_m << 5)  | OP_JGT;
-	RAM[next_word] = i;
-	next_word++;
-	RAM[next_word] = dest;
-	next_word++;
-	RAM[next_word] = lhs;
-	next_word++;
-	RAM[next_word] = rhs;
-	next_word++;
-}
-
+f(jmp_vw, OP_JMP, VW1);
+f(jeq_vw, OP_JEQ, VW3);
+f(jne_vw, OP_JNE, VW3);
+f(jlt_vw, OP_JLT, VW3);
+f(jgt_vw, OP_JGT, VW3);
 //cpu state
-void halt_vw()
-{   RAM[next_word++] = OP_HALT;   }
+f(halt_vw, OP_HALT, VW0);
 
 //Fixed Width
-#define f emit_func
 //basics
-f(nop_fw, OP_NOP, ARG0);
-f(inc_fw, OP_INC, ARG1);
-f(dec_fw, OP_DEC, ARG1);
-f(set_fw, OP_SET, ARG2);
+f(nop_fw, OP_NOP, FW0);
+f(inc_fw, OP_INC, FW1);
+f(dec_fw, OP_DEC, FW1);
+f(set_fw, OP_SET, FW2);
 //arithmetic
-f(add_fw, OP_ADD, ARG3);
-f(sub_fw, OP_SUB, ARG3);
-f(mul_fw, OP_MUL, ARG3);
-f(div_fw, OP_DIV, ARG3);
+f(add_fw, OP_ADD, FW3);
+f(sub_fw, OP_SUB, FW3);
+f(mul_fw, OP_MUL, FW3);
+f(div_fw, OP_DIV, FW3);
 //logic/bitwise
-f(not_fw, OP_NOT, ARG2);
-f(and_fw, OP_AND, ARG3);
-f(ior_fw, OP_IOR, ARG3);
-f(xor_fw, OP_XOR, ARG3);
-f(lsl_fw, OP_LSL, ARG_SHIFT);
-f(rsl_fw, OP_RSL, ARG_SHIFT);
+f(not_fw, OP_NOT, FW2);
+f(and_fw, OP_AND, FW3);
+f(ior_fw, OP_IOR, FW3);
+f(xor_fw, OP_XOR, FW3);
+f(lsl_fw, OP_LSL, FWS);
+f(rsl_fw, OP_RSL, FWS);
 //branch/jump
-f(jmp_fw, OP_JMP, ARG1);
-f(jeq_fw, OP_JEQ, ARG3);
-f(jne_fw, OP_JNE, ARG3);
-f(jlt_fw, OP_JLT, ARG3);
-f(jgt_fw, OP_JGT, ARG3);
+f(jmp_fw, OP_JMP, FW1);
+f(jeq_fw, OP_JEQ, FW3);
+f(jne_fw, OP_JNE, FW3);
+f(jlt_fw, OP_JLT, FW3);
+f(jgt_fw, OP_JGT, FW3);
 //cpu state
-f(halt_fw, OP_HALT, ARG0);
+f(halt_fw, OP_HALT, FW0);
 #undef f
 
 typedef struct
@@ -300,6 +187,7 @@ int get_jump_label(char *name)
 	unresolved_labels.vals[unresolved_labels.count] = next_word+1; //marker to let label function know this requires resolving
 	printf("unresolved:%d\n",next_word+1);
 	unresolved_labels.count++;
+	return -1;
 }
 
 Dict aliases;

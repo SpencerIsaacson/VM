@@ -12,28 +12,29 @@ typedef enum
 char * keywords[] =
 {
 	//basics
-	[OP_NOP] = "nop",
-	[OP_INC] = "inc",
-	[OP_DEC] = "dec",
-	[OP_SET] = "set",
+	[OP_NOP]         = "nop",
+	[OP_INC]         = "inc",
+	[OP_DEC]         = "dec",
+	[OP_SET]         = "set",
 	//arithmetic
-	[OP_ADD] = "add",
-	[OP_SUB] = "sub",
-	[OP_MUL] = "mul",
-	[OP_DIV] = "div",
+	[OP_ADD]         = "add",
+	[OP_SUB]         = "sub",
+	[OP_MUL]         = "mul",
+	[OP_DIV]         = "div",
 	//logic
-	[OP_NOT] = "not",
-	[OP_AND] = "and",
-	[OP_IOR] = "ior",
-	[OP_XOR] = "xor",
-	[OP_LSL] = "lsl",
-	[OP_RSL] = "rsl",
+	[OP_NOT]         = "not",
+	[OP_AND]         = "and",
+	[OP_IOR]         = "ior",
+	[OP_XOR]         = "xor",
+	[OP_LSL]         = "lsl",
+	[OP_RSL]         = "rsl",
 	//branch
-	[OP_JMP] = "jmp",
-	[OP_JLT] = "jlt",
-	[OP_JGT] = "jgt",
-	[OP_JEQ] = "jeq",
-	[OP_JNE] = "jne",	
+	[OP_JMP]         = "jmp",
+	[OP_JLT]         = "jlt",
+	[OP_JGT]         = "jgt",
+	[OP_JEQ]         = "jeq",
+	[OP_JNE]         = "jne",
+	[keyword_define] = "define",
 };
 
 char str_eq(char *a, char *b)
@@ -56,6 +57,24 @@ int parse_int(char *s)
 		ret += (*(s++)-'0');
 		if(*s != 0)
 			ret *= 10;
+	}
+
+	return ret;
+}
+
+unsigned int parse_hex(char *s)
+{
+	int ret = 0;
+	while(*s != 0)
+	{
+		if(isdigit(*s))
+			ret += (*(s++)-'0');
+		else if(isalpha(*s)){
+			*s &= ~0x20;
+			ret += (*(s++)-('A'-0xA));		
+		}
+		if(*s != 0)
+			ret *= 0x10;
 	}
 
 	return ret;
@@ -301,6 +320,14 @@ int main(int argc, char** argv)
 				{
 					tres_arg(keyword, &cursor,line);	
 				} break;
+				case keyword_define:
+				{
+					printf("")
+				}
+				default:
+				{
+					//assume is label
+				}
 			}
 		}
 
@@ -310,4 +337,3 @@ int main(int argc, char** argv)
 		fwrite(&humidor.memory.RAM[start_address], byte_count,1,file);
 	}
 }
-

@@ -131,17 +131,84 @@ void reset()
 
 typedef struct
 {
-	u32 address;
 	u32 count;
+	u32 address;
 } ChunkHeader;
 
-void load_ROM(char* path)
+typedef struct
+{
+	char start_code[4];
+	u32 chunk_count;
+} ROMHeader;
+
+typedef enum
+{
+	ROMType_FULL = 0, //simply freads the entire contents of the file after the start code into memory
+	ROMType_MAPPED = 1, //does a chunked load to save space on the rom file
+} ROMType;
+
+//maps the chunks of a ROMType_MAPPED ROM file into memory (called only by load_ROM)
+bool load_ROM_mapped(FILE *file, ROMHeader rom_header)
+{
+	for (int current_chunk = 0; current_chunk < rom_header.chunk_count; ++current_chunk)
+	{
+		ChunkHeader chunk_header;
+		byte bytes_read = fread(&chunk_header, 1, sizeof(ChunkHeader), file);
+		
+		if(bytes_read != sizeof(ChunkHeader))
+			return false;
+
+		bytes_read = fread(&RAM[chunk_header.address], 1, chunk_header.count, file);
+
+		if(bytes_read != chunk_header.count)
+			return false;
+	}
+
+	return true;
+}
+
+//loads the contents of a ROMType_FULL ROM file directly into memory following the start code (called only by load_ROM)
+bool load_ROM_full(FILE *file, ROMHeader rom_header)
+{
+	if(file)
+	{
+		fseek(file, 0, SEEK_END);
+		int bytes_long = ftell(file) - 4;//adjust size by start code
+		fseek(file, 4, SEEK_SET);
+		fread(RAM, 1, bytes_long, file);
+		return true;
+	}
+
+	return false;
+}
+
+//loads the contents of a ROM file into memory, checking for a ROM header and then mapping the chunks accordingly
+bool load_ROM(char *path)
 {
 	FILE* file = fopen(path, "rb");
-	fseek(file, 0, SEEK_END);
-	int bytes_long = ftell(file);
-	rewind(file);
-	fread(RAM, bytes_long, 1, file);
+
+	if(file)
+	{
+		ROMHeader rom_header;
+		byte bytes_read = fread(&rom_header, 1, sizeof(ROMHeader), file);
+
+		if(bytes_read != sizeof(ROMHeader))
+			return false;
+
+		//todo strcmp
+		if(rom_header.start_code[0] != 'H' || rom_header.start_code[1] != 'U' || rom_header.start_code[2] != 'M')
+			return false;
+
+		ROMType rom_type = rom_header.start_code[3];
+
+		if(rom_type == ROMType_MAPPED)
+			return load_ROM_mapped(file, rom_header);
+
+		if(rom_type == ROMType_FULL)
+			return load_ROM_full(file, rom_header);
+	}
+
+	return false;
 }
 
 void jump_cond(bool cond, u32 dest)

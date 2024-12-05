@@ -11,6 +11,9 @@ port 2D platformer to bytecode
 build 3D Zelda dungeon
 port to bytecode
 
+12/04/2024
+add chunked ROM format CHECK
+
 //notes
 /*
 things to implement:

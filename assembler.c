@@ -7,8 +7,9 @@
 
 typedef enum
 {
-	NOT_IMPLEMENTED
+	NOT_IMPLEMENTED = -17
 } ErrorCodes;
+
 char * keywords[] =
 {
 	//basics

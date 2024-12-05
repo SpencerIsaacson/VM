@@ -7,6 +7,8 @@ int next_word = start_address;
 	The fw emitters just return a u32 that represents the full instruction, and are in that way far more flexible.
 */
 
+
+//Operand Types
 typedef struct { AddrMode mode; u8  val; } Op8;
 typedef struct { AddrMode mode; u8  val; } Op5;
 typedef struct { AddrMode mode; u16 val; } Op11;
@@ -15,7 +17,7 @@ typedef struct { AddrMode mode; u32 val; } Op24;
 typedef struct { AddrMode mode; u32 val; } Op32;
 
 //INSTRUCTION FORMATS
-//todo guarantee args are in proper ranges
+//todo guarantee args are in proper ranges (asserts)
 
 //Variable Width
 

@@ -38,42 +38,46 @@ void fill_audio(void *udata, Uint8 *stream, int len)
 
 //#include "zelda/zelda.h"
 
-void main(int argc, char **argv)
+typedef enum ExitCodes
 {
+	HUM_EXIT_SUCCESS = 0,
+	HUM_EXIT_NO_ROM,
+	HUM_EXIT_INVALID_ROM,
+	HUM_EXIT_INVALID_ARG,
+} ExitCodes;
+
+int main(int argc, char **argv)
+{
+	//todo clean up args handling (make order agnostic, do strcmp rather than char by char)
 	if(argc > 1)
 	{
 		if(argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0)
 		{
 			printf("humidor version: 0.0.0\n");
-			exit(0);
+			exit(HUM_EXIT_SUCCESS);
+		}
+		else if(argv[1][0] == '-')
+		{
+			printf("unrecognized commandline argument \"%s\"\n", argv[1]);
+			exit(HUM_EXIT_INVALID_ARG);
 		}
 		else
 		{
-			if(!(argv[1][0] == '-' && argv[1][1] == 0))
+			reset();
+			if(!load_ROM(argv[1]))
 			{
-				printf("unrecognized commandline argument \"%s\"\n", argv[1]);
-				exit(1);
+				printf("invalid ROM path \"%s\"\n", argv[1]);
+				exit(HUM_EXIT_INVALID_ROM);
 			}
 		}
 	}
-
-	reset();
-	
-	//load rom
-	{
-		FILE *file = fopen("assembly.bin", "rb");
-		fseek(file, 0, SEEK_END);
-		int c = ftell(file);
-		rewind(file);
-		fread(&humidor.memory.RAM[start_address],c,1,file);
-		fclose(file);
+	else {
+		printf("No ROM selected to run\n");
+		exit(HUM_EXIT_NO_ROM);
 	}
 
-	//#include "foo.test.c"
-
 	
 
-	//init();
 	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK | SDL_INIT_AUDIO);
 
     //Load Joysticks
@@ -110,7 +114,8 @@ void main(int argc, char **argv)
 
 	s64 prev = 0;
 	s64 cur = 0;
-	u32 micros = 0;
+	u32 micros_since_frame_present = 0;
+
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 	QueryPerformanceCounter((LARGE_INTEGER*)&prev);
 
@@ -118,10 +123,6 @@ void main(int argc, char **argv)
     {
     	if(GetAsyncKeyState(VK_ESCAPE))
     		return;
-		// if(GetAsyncKeyState('R'))
-		// {
-		// 	init();
-		// }
         SDL_Event event;
         while (SDL_PollEvent(&event)) 
         {
@@ -208,62 +209,41 @@ void main(int argc, char **argv)
 			}
 		}
 
-// 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
-// 		diff = ((cur - prev) * 1000000) / freq;
-// 		unsigned int microseconds = (unsigned int)(diff & 0xffffffff);
-// 		g->delta_time = microseconds/1000000.0f;
-// 		_tick();
-// 		memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
-//     	SDL_UpdateWindowSurface(window);
-// 		prev = cur;
-// #if DEBUG
-// 		static float t;
-// 		t+=g->delta_time;
-// 		if(t > 1)
-// 		{
-// 			printf("microseconds last frame: %d\n", microseconds); //once a second, print the microseconds the previous frame took to process
-// 			t=0;
-
-// 		}
-// #endif
-		//Sleep(500);
 #define clock_rate 100000000
 #define tick_count 100
 #define interval 1000000/clock_rate*tick_count
 		u32 microseconds;
-		static u32 micros2;
+		static u32 micros_since_tick_block;
 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
     	diff = ((cur - prev) * 1000000) / freq;
     	microseconds = (u32)(diff & 0xffffffff);
-    	micros2 += microseconds;
+    	micros_since_tick_block += microseconds;
 
-    	if(micros2 > interval)
+    	if(micros_since_tick_block > interval)
     	{
-
 	    	for (int i = 0; i < tick_count; ++i)
 	    	{
 	    		tick();
 	    	}
-	    	micros2=0;
+
+	    	micros_since_tick_block = 0;
     	}
 
 		QueryPerformanceCounter((LARGE_INTEGER*)&cur);
     	diff = ((cur - prev) * 1000000) / freq;
     	microseconds = (u32)(diff & 0xffffffff);
-    	micros += microseconds;
+    	micros_since_frame_present += microseconds;
 
     	//todo replace with interrupt
-    	if(micros >= 16667)
+    	if(micros_since_frame_present >= 16667)
     	{
-			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4);
-#if DEBUG
-			profile(SDL_UpdateWindowSurface(window), "screen do");
-#else
+			memcpy(pixels, &mem.frame_buffer, vm_width*vm_height*4); //todo replace SDL with win32 layer so you can avoid the memcpy
 			SDL_UpdateWindowSurface(window);
-#endif
-	    	micros = 0;
+	    	micros_since_frame_present = 0;
     	}
 
 		QueryPerformanceCounter((LARGE_INTEGER*)&prev);
     }
+
+    return HUM_EXIT_SUCCESS;
  }	

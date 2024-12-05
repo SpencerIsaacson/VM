@@ -1,4 +1,4 @@
-#include <assert.h>
+#define c2s(n) ((string){.data = n, .length = strlen(n)})
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +53,7 @@ AST_Node* next_node()
 	return NULL;
 }
 
-AST_Node* Ident(char *name)
+AST_Node* Ident(char* name)
 {
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_Ident;
@@ -88,7 +88,7 @@ int var_decl = 0;
 char* var_names[1000];
 
 
-int lookup_addr(char *varname)
+int lookup_addr(char* varname)
 {
 	for (int i = 0; i < countof(var_names); ++i)
 	{
@@ -132,7 +132,7 @@ AST_Node* Cond(AST_Node* lhs, char* operator, AST_Node* rhs)
 	return node;
 }
 
-AST_Node* Increment(char *name)
+AST_Node* Increment(char* name)
 {	
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_Increment;
@@ -149,7 +149,7 @@ AST_Node* If(AST_Node* condition, AST_Node* body)
 	return node;
 }
 
-AST_Node* GoTo(char *label_name)
+AST_Node* GoTo(char* label_name)
 {	
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_GoTo;
@@ -157,7 +157,7 @@ AST_Node* GoTo(char *label_name)
 	return node;
 }
 
-AST_Node* BinOp(AST_Node* lhs, char *operator, AST_Node* rhs)
+AST_Node* BinOp(AST_Node* lhs, char* operator, AST_Node* rhs)
 {
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_BinOp;
@@ -175,7 +175,7 @@ AST_Node* IntLiteral(int value)
 	return node;
 }
 
-AST_Node* Const(char *name)
+AST_Node* Const(char* name)
 {
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_Const;
@@ -183,7 +183,7 @@ AST_Node* Const(char *name)
 	return node;	
 }
 
-AST_Node* Type(char *name)
+AST_Node* Type(char* name)
 {
 	AST_Node* node = next_node();
 	node->ast_node_type = nt_Type;
@@ -201,10 +201,16 @@ AST_Node* Decl(AST_Node* type, AST_Node* var)
 	return node;	
 }
 
-char* names[7] = {"x", "y", "width", "height", "_x", "_y", "white"};
+typedef struct
+{
+	int length;
+	char *data;
+} string;
+
+string names[7] = {c2s("x"), c2s("y"), c2s("width"), c2s("height"), c2s("_x"), c2s("_y"), c2s("white")};
 int addr_look_up[7] = { 200, 201, 202, 203, 204, 205, 206 };
 
-int lookup(char *varname)
+int lookup(char* varname)
 {
 	for (int i = 0; i < countof(names); ++i)
 	{
@@ -226,32 +232,32 @@ int indent_level = 0;
 void indent()
 {
 	for (int i = 0; i < indent_level; ++i)
-		printf("   ");
+		printf(c2s("   "));
 }
 
 print_cond(AST_Node *condition)
 {
 	//todo compound conditions
 	if(condition->lhs->ast_node_type == nt_IntLiteral)
-		printf("%d",condition->lhs->value);
+		printf(c2s("%d"),condition->lhs->value);
 	if(condition->lhs->ast_node_type == nt_Ident)
-		printf("%s",condition->lhs->name);
+		printf(c2s("%s"),condition->lhs->name);
 
-	printf(" %s ", condition->operator);
+	printf(c2s(" %s "), condition->operator);
 
 	if(condition->rhs->ast_node_type == nt_IntLiteral)
-		printf("%d",condition->rhs->value);
+		printf(c2s("%d"),condition->rhs->value);
 	if(condition->rhs->ast_node_type == nt_Ident)
-		printf("%s",condition->rhs->name);
+		printf(c2s("%s"),condition->rhs->name);
 }
 
 void print_while(AST_Node *_while, SourceLevel level)
 {
-	printf("while ");
+	printf(c2s("while "));
 	print_cond(_while->condition);
-	printf("\n");
+	printf(c2s("\n"));
 	indent();
-	printf("{\n");
+	printf(c2s("{\n"));
 	indent_level++;
 	for(int i = 0; i < _while->body->statement_count; i++)
 	{
@@ -259,16 +265,16 @@ void print_while(AST_Node *_while, SourceLevel level)
 	}
 	indent_level--;
 	indent();
-	printf("}\n");
+	printf(c2s("}\n"));
 }
 
 void print_if(AST_Node *_if, SourceLevel level)
 {
-	printf("if ");
+	printf(c2s("if "));
 	print_cond(_if->condition);
-	printf("\n");
+	printf(c2s("\n"));
 	indent();
-	printf("{\n");
+	printf(c2s("{\n"));
 	indent_level++;
 	for(int i = 0; i < _if->body->statement_count; i++)
 	{
@@ -276,7 +282,7 @@ void print_if(AST_Node *_if, SourceLevel level)
 	}
 	indent_level--;
 	indent();
-	printf("}\n");
+	printf(c2s("}\n"));
 }
 
 void print_statement(AST_Node *statement, SourceLevel level)
@@ -289,10 +295,10 @@ void print_statement(AST_Node *statement, SourceLevel level)
 			switch(level)
 			{
 				case LOW:
-					printf("decl %s %s\n", statement->type->name, statement->var->name);
+					printf(c2s("decl %s %s\n"), statement->type->name, statement->var->name);
 					break;
 				case HIGH:
-					printf("%s %s\n", statement->type->name, statement->var->name);
+					printf(c2s("%s %s\n"), statement->type->name, statement->var->name);
 			}
 		} break;			
 		case nt_Assign:
@@ -301,15 +307,15 @@ void print_statement(AST_Node *statement, SourceLevel level)
 			{
 				case LOW:
 					if(statement->rhs->ast_node_type == nt_IntLiteral)
-						printf("assign %s %d\n", statement->lhs->name, statement->rhs->value);
+						printf(c2s("assign %s %d\n"), statement->lhs->name, statement->rhs->value);
 					else if(statement->rhs->ast_node_type == nt_Ident)
-						printf("assign %s %s\n", statement->lhs->name, statement->rhs->name);
+						printf(c2s("assign %s %s\n"), statement->lhs->name, statement->rhs->name);
 					break;
 				case HIGH:
 					if(statement->rhs->ast_node_type == nt_IntLiteral)
-						printf("%s = %d\n", statement->lhs->name, statement->rhs->value);
+						printf(c2s("%s = %d\n"), statement->lhs->name, statement->rhs->value);
 					else if(statement->rhs->ast_node_type == nt_Ident)
-						printf("%s = %s\n", statement->lhs->name, statement->rhs->name);
+						printf(c2s("%s = %s\n"), statement->lhs->name, statement->rhs->name);
 					break;
 			}
 		} break;
@@ -318,10 +324,10 @@ void print_statement(AST_Node *statement, SourceLevel level)
 			switch(level)
 			{
 				case LOW:
-					printf("assign [%d] %s//todo print address/expression correctly\n", statement->value, statement->var->name);
+					printf(c2s("assign [%d] %s//todo print address/expression correctly\n"), statement->value, statement->var->name);
 					break;
 				case HIGH:
-					printf("[%d] = %s//todo print address/expression correctly\n", statement->value, statement->var->name);
+					printf(c2s("[%d] = %s//todo print address/expression correctly\n"), statement->value, statement->var->name);
 					break;
 			}
 		} break;			
@@ -329,10 +335,10 @@ void print_statement(AST_Node *statement, SourceLevel level)
 			switch(level)
 			{
 				case LOW:
-					printf("inc %s\n", statement->name);
+					printf(c2s("inc %s\n"), statement->name);
 					break;
 				case HIGH:
-					printf("%s++\n", statement->name);
+					printf(c2s("%s++\n"), statement->name);
 					break;
 			}
 			break;
@@ -364,18 +370,18 @@ void emit_statement(AST_Node *stmt)
 	{
 		case nt_Increment:
 		{
-			printf("inc %d\n", lookup_addr(stmt->name));
+			printf(c2s("inc %d\n"), lookup_addr(stmt->name));
 			instr_index++;
 		} break;
 		case nt_Assign:
 			if(stmt->rhs->ast_node_type == nt_IntLiteral)
-				printf("set %d %d\n", lookup_addr(stmt->lhs->name), stmt->rhs->value);
+				printf(c2s("set %d %d\n"), lookup_addr(stmt->lhs->name), stmt->rhs->value);
 			else if(stmt->rhs->ast_node_type == nt_Ident)
-				printf("set %d @%d\n", lookup_addr(stmt->lhs->name), lookup_addr(stmt->rhs->name));
+				printf(c2s("set %d @%d\n"), lookup_addr(stmt->lhs->name), lookup_addr(stmt->rhs->name));
 				instr_index++;			
 			break;
 		case nt_While:
-			//printf("while %s %s %s\n", stmt->condition->lhs->name, stmt->condition->operator, stmt->condition->rhs->name);			
+			//printf(c2s("while %s %s %s\n"), stmt->condition->lhs->name, stmt->condition->operator, stmt->condition->rhs->name);			
 			break;
 		case nt_If:
 		{
@@ -384,22 +390,22 @@ void emit_statement(AST_Node *stmt)
 			{
 				case '<':
 				{
-					printf("jlt ");
+					printf(c2s("jlt "));
 					unsigned int jump_address = instr_index+2;
-					printf("%d ", jump_address);
+					printf(c2s("%d "), jump_address);
 					AST_Node *cond = stmt->condition;
 
 					//swap lhs and rhs
 					if(cond->rhs->ast_node_type == nt_IntLiteral)
-						printf("%d ", cond->rhs->value);
+						printf(c2s("%d "), cond->rhs->value);
 					else if(stmt->lhs->ast_node_type == nt_Ident)
-						printf("@%d ", lookup_addr(cond->rhs->name));
+						printf(c2s("@%d "), lookup_addr(cond->rhs->name));
 
 					if(cond->lhs->ast_node_type == nt_IntLiteral)
-						printf("%d ", cond->lhs->value);
+						printf(c2s("%d "), cond->lhs->value);
 					else if(cond->lhs->ast_node_type == nt_Ident)
-						printf("@%d ", lookup_addr(cond->lhs->name));
-					printf("\n");
+						printf(c2s("@%d "), lookup_addr(cond->lhs->name));
+					printf(c2s("\n"));
 					for (int i = 0; i < stmt->body->statement_count; ++i)
 					{
 						emit_statement(stmt->body->statements[i]);
@@ -407,7 +413,7 @@ void emit_statement(AST_Node *stmt)
 					instr_index++;
 				} break;
 				default:
-					printf("operator `%c` not implemented!\n", c);
+					printf(c2s("operator `%c` not implemented!\n"), c);
 					exit(-1);
 			}
 		} break;
@@ -424,16 +430,16 @@ void emit_code(AST_Node	*root)
 
 	}
 	else
-		printf("cannot parse null AST");
+		printf(c2s("cannot parse null AST"));
 }
 
 void test_program()
 {
-	#include "basic_ast.h"
+	#include c2s("basic_ast.h")
 
 	print_source(h,HIGH);
 
-	printf("\n");
+	printf(c2s("\n"));
 
 	emit_code(h);
 }
@@ -453,11 +459,7 @@ bool is_alphanumeric(char c)
 	return is_letter(c) || is_number(c);
 }
 
-typedef struct
-{
-	int length;
-	char *data;
-} string;
+
 
 char *copy_to_c_string(string t)
 {
@@ -476,9 +478,9 @@ char *copy_to_c_string(string t)
 
 char * keywords[keyword_count] =
 {
-	"if",
-	"while",
-	"int",
+	c2s("if"),
+	c2s("while"),
+	c2s("int"),
 };
 
 bool string_equals(string a, char *b)
@@ -510,17 +512,17 @@ typedef enum
 
 char *tok_typenames[tok_typecount] = 
 {
-	      [tok_NONE] = "NONE",	
-	 [tok_OpenBrace] = "OpenBrace",
-	[tok_CloseBrace] = "CloseBrace",
-	    [tok_Equals] = "Equals",
-	  [tok_LessThan] = "LessThan",
-	      [tok_Plus] = "Plus",
-	    [tok_Divide] = "Divide",
-	 [tok_Increment] = "Increment",
-	   [tok_Keyword] = "Keyword",
-	     [tok_Ident] = "Ident",
-	[tok_IntLiteral] = "IntLiteral",
+	      [tok_NONE] = c2s("NONE"),	
+	 [tok_OpenBrace] = c2s("OpenBrace"),
+	[tok_CloseBrace] = c2s("CloseBrace"),
+	    [tok_Equals] = c2s("Equals"),
+	  [tok_LessThan] = c2s("LessThan"),
+	      [tok_Plus] = c2s("Plus"),
+	    [tok_Divide] = c2s("Divide"),
+	 [tok_Increment] = c2s("Increment"),
+	   [tok_Keyword] = c2s("Keyword"),
+	     [tok_Ident] = c2s("Ident"),
+	[tok_IntLiteral] = c2s("IntLiteral"),
 };
 typedef struct
 {
@@ -529,13 +531,10 @@ typedef struct
 } Token;
 
 int token_count = 0;
-Token *tokens = NULL; //todo handle proper allocation
+Token tokens[7000]; //todo handle proper allocation
 void lex(string source)
 {
-	tokens = realloc(tokens, sizeof(Token)*source.length);
-	token_count	= 0;
-
-	#define new_tok(n) (Token){.type = n, .text = {.data = &source.data[i], .length = 1 } }
+#define new_tok(n) (Token){.type = n, .text = {.data = &source.data[i], .length = 1 } }
 	for (int i = 0; i < source.length; ++i)
 	{
 		char c = source.data[i];
@@ -556,7 +555,7 @@ void lex(string source)
 				{
 					tokens[token_count++] = new_tok(tok_Divide);
 				}
-			} break;
+			} break;				
 			case '{':
 				tokens[token_count++] = new_tok(tok_OpenBrace);
 				break;
@@ -624,9 +623,11 @@ void lex(string source)
 	}
 }
 
-AST_Node *parse_statement(Token *tokens)
+AST_Node *parse(Token *tokens)
 {
-	Token t = *tokens;
+	int t_i = 0;
+	Token t = tokens[t_i];
+
 	AST_Node *n = NULL;
 
 	switch(t.type)
@@ -635,96 +636,44 @@ AST_Node *parse_statement(Token *tokens)
 		{
 		 	n = IntLiteral(0);
 		} break;
-		case tok_Ident:
-		{
-			char *d = copy_to_c_string(t.text);
-			n = Ident(d);
-	 		t = *(++tokens);
-
-	 		if(t.type == tok_Equals)
-	 		{
-		 		t = *(++tokens);
-				return Assign(n, IntLiteral(10));
-	 		}
-
-			return NULL;	
-		} break;
 		case tok_Keyword:
 		{
-			if(string_equals(t.text, "int"))
+			if(string_equals(t.text, c2s("int")))
 			{
-		 		n = Type("int");
-		 		t = *(++tokens);
+		 		n = Type(c2s("int"));
+		 		t_i++;
+		 		t = tokens[t_i];
 		 		if(t.type == tok_Ident)
 		 		{
 		 			char *d = copy_to_c_string(t.text); //this is fucking dumb and I hate it and we need to come up with a more general strategy for string handling.
-		 			return Decl(n, Ident(d));
+		 			n = Decl(n, Ident(d));
 		 		}
 			}
-			else if(string_equals(t.text, "if"))
-			{
-		 		t = *(++tokens);
-				char *d = copy_to_c_string(t.text);
-				n = Ident(d);
-
-		 		t = *(++tokens);
-		 		if(t.type == tok_LessThan)
-		 		{
-		 			AST_Node *if_body[0];
-					return If(Cond(n, "<", IntLiteral(11)), StatementList(NodeList(if_body)));
-		 		}
-
-		 		return NULL;
-
-
-			}			
-		} break;
+		} break;			
 	}
-}
 
-AST_Node* parse_statement_list(Token *tokens)
-{
-	int statement_count = 0;
-
-
-	AST_Node *a = parse_statement(tokens);
-	tokens++;
-	tokens++;
-	AST_Node *b = parse_statement(tokens);
-	tokens++;
-	tokens++;
-	tokens++;
-	AST_Node *c = parse_statement(tokens);
-	tokens++;
-	tokens++;	
-	AST_Node *d = parse_statement(tokens);
-	tokens++;
-	tokens++;
-	tokens++;	
-	AST_Node *e = parse_statement(tokens);
-	AST_Node *sts[5] = {a,b,c,d,e};
+	AST_Node *sts[1] = {n};
 	AST_Node *list = StatementList(NodeList(sts));
 	return list;
 }
-
 void print_tokens(int detail)
 {
 	for (int i = 0; i < token_count; ++i)
 	{
-		printf("%.*s", tokens[i].text.length, tokens[i].text.data);
+		printf(c2s("%.*s"), tokens[i].text.length, tokens[i].text.data);
 		if(detail)
 		{
-			printf(":\n");
-			printf("    %s\n", tok_typenames[tokens[i].type]);
+			printf(c2s(":\n"));
+			printf(c2s("    %s\n"), tok_typenames[tokens[i].type]);
 		}
 		else
-			printf("\n");
+			printf(c2s("\n"));
 	}
 }
 
 char *read_file(char *path)
 {
-	FILE *file = fopen(path, "rb");
+	FILE *file = fopen(path, c2s("rb"));
 	fseek(file, 0, SEEK_END);
 	int source_size = ftell(file);
 	rewind(file);
@@ -737,12 +686,16 @@ char *read_file(char *path)
 
 int main(int argc, char** argv)
 {
- 	char *source = read_file("basic.hum");
+ 	char *source = read_file(c2s("basic.hum"));
 
  	string source_string = (string){.length = strlen(source), .data = source };
  	lex(source_string);
  	//print_tokens(1);
- 	AST_Node *ast = parse_statement_list(tokens);
+ 	AST_Node *ast = parse(tokens);
  	print_source(ast, HIGH);
- 	//emit_code(ast);
+ 	emit_code(ast);
+	// AST_Node* decl_x = Decl(Type(c2s("int")), Var(c2s("x")));
+	// AST_Node* x_init = Assign(Var(c2s("x")), 10);
+
+	// printf(c2s("loadi A %d\nloadi B 0\nor\nstore %d\n"), x_init->value, lookup_addr(x_init->var->name));
 }

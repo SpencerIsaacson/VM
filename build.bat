@@ -6,5 +6,5 @@ if "%~1"=="release" (
 		cl -Zi -Os -Fehumidor.exe humidor.res client.c user32.lib SDL2.lib && if "%~2"=="run" humidor "%~3"
 ) else (
 REM DEV BUILD
-		"compiler/tcc" -DDEBUG -DINCLUDE_EDITORS=1 client.c -o humidor.exe -luser32 Dependencies/SDL2.dll && if "%~1"=="run" humidor "%~2"
+		"tcc/tcc" -DDEBUG -DINCLUDE_EDITORS=1 client.c -o humidor.exe -luser32 _SDL/SDL2.dll && if "%~1"=="run" humidor "%~2"
 )

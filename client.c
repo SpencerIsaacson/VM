@@ -4,7 +4,7 @@
 #include <time.h>
 #include <windows.h>
 #define SDL_MAIN_HANDLED
-#include "Dependencies/SDL_Headers/SDL.h"
+#include "_SDL/SDL_Headers/SDL.h"
 #include "debug.h"
 #include "input.h"
 #include "draw.h"

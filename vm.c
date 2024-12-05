@@ -121,7 +121,7 @@ typedef enum OpCode
 #define screen_address ((sizeof(humidor.memory.user_mem)+sizeof(humidor.memory.game_pads)+sizeof(humidor.memory.audio_buffer))/sizeof(u32))
 
 
-#include "live_assembler.c"
+#include "assembler/live_assembler.c"
 
 void reset()
 {
